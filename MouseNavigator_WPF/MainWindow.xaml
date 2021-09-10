@@ -1,0 +1,15 @@
+﻿<Window x:Class="MouseNavigator_WPF.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MouseNavigator_WPF"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Label x:Name="MouseStateLabel" Width="60" Height="40" HorizontalAlignment="Center"/>
+        <Button x:Name="buttonUp" Width="80" Height="80" Content="button1" Margin="356,70,356,269" 
+                Click="ButtonUp_Click"/>
+        
+    </Grid>
+</Window>
