@@ -20,70 +20,90 @@ namespace MouseNavigator_WPF
     /// </summary>
     public partial class MainWindow : Window
     {
-        private int hMouseHook;
-        private MouseMonitor mouseMonitor;
-        //private MouseState state;
-        private int mouseState;
+        private MouseHook mouseHook;
 
         public MainWindow()
         {
             InitializeComponent();
+            //this.Closing += new System.ComponentModel.CancelEventHandler(MainWindow_Closing);
+
             this.buttonUp.DragOver += ButtonUp_DragOver;
 
-            mouseMonitor = new MouseMonitor();
-            //state = new MouseState();
 
-            formStartHook();
-            this.formStartHook();
+            mouseHook = new MouseHook();
+            mouseHook.InitHook();
+            mouseHook.FormStartHook();
+            mouseHook.ContentRender += SetContent;
         }
-
-        public void floatingWindow()
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            MessageBoxResult result = MessageBox.Show("确定是退出吗？", "询问", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
+            //关闭窗口
+            if (result == MessageBoxResult.Yes)
+                e.Cancel = false;
+
+            //不关闭窗口
+            if (result == MessageBoxResult.No)
+                e.Cancel = true;
+
+            mouseHook.FormStopHook();
 
         }
-        private void formStartHook()
+        public void FloatingWindow()
         {
-            this.hMouseHook = mouseMonitor.MouseHookStart(onMouseProc);
+            FloatingWindow floatingWindow = new FloatingWindow();
+            floatingWindow.Show();
 
         }
 
-        private void formStopHook()
+        public void SetContent(string value1)
         {
-            if (this.hMouseHook != 0)
-            {
-                WinApi.UnhookWindowsHookEx(this.hMouseHook);
-                //this.state.saveAction(DateTime.Today);
+            this.MouseStateLabel.Content = mouseHook.mouseState.ToString();
 
-
-            }
         }
+        //private void formStartHook()
+        //{
+        //    this.hMouseHook = mouseMonitor.MouseHookStart(onMouseProc);
 
-        public int onMouseProc(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            switch (wParam.ToInt32())
-            {
-                case MouseMessage.WM_LBUTTONDOWN:
-                    //this.leftClickCount++;
-                    
-                    floatingWindow();
-                    break;
-                case MouseMessage.WM_RBUTTONDOWN:
-                    //this.rightClickCount++;
-                    break;
-                case MouseMessage.WM_MBUTTONDOWN:
-                    //this.middleClickCount++;
-                    mouseState += 1;
-                    Application.Current.MainWindow.Show();
-                    Application.Current.MainWindow.Activate();
+        //}
 
-                    break;
-            }
+        //private void formStopHook()
+        //{
+        //    if (this.hMouseHook != 0)
+        //    {
+        //        WinApi.UnhookWindowsHookEx(this.hMouseHook);
+        //        //this.state.saveAction(DateTime.Today);
 
-            this.MouseStateLabel.Content = this.mouseState.ToString();
 
-            return WinApi.CallNextHookEx(this.hMouseHook, nCode, wParam, lParam);
-        }
+        //    }
+        //}
+
+        //public int OnMouseProc(int nCode, IntPtr wParam, IntPtr lParam)
+        //{
+        //    switch (wParam.ToInt32())
+        //    {
+        //        case MouseMessage.WM_LBUTTONDOWN:
+        //            //this.leftClickCount++;
+
+        //            floatingWindow();
+        //            break;
+        //        case MouseMessage.WM_RBUTTONDOWN:
+        //            //this.rightClickCount++;
+        //            break;
+        //        case MouseMessage.WM_MBUTTONDOWN:
+        //            //this.middleClickCount++;
+        //            mouseState += 1;
+        //            Application.Current.MainWindow.Show();
+        //            Application.Current.MainWindow.Activate();
+
+        //            break;
+        //    }
+
+        //    this.MouseStateLabel.Content = this.mouseState.ToString();
+
+        //    return WinApi.CallNextHookEx(this.hMouseHook, nCode, wParam, lParam);
+        //}
 
         private void ButtonUp_DragOver(object sender, DragEventArgs e)
         {
@@ -93,10 +113,13 @@ namespace MouseNavigator_WPF
 
         private void ButtonUp_Click(object sender, RoutedEventArgs e)
         {
-            //MessageBox.Show("clicked\n!");
-            Application.Current.MainWindow.Hide();
+            MessageBox.Show("clicked\n!");
+
+            //Application.Current.MainWindow.Hide();
 
         }
+
+
 
     }
 }

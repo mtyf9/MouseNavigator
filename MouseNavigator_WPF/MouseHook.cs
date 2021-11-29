@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace MouseNavigator_WPF
 {
@@ -10,45 +11,52 @@ namespace MouseNavigator_WPF
     {
         private int hMouseHook;
         private MouseMonitor mouseMonitor;
+        public int mouseState;
 
+        public delegate void Dele2Main(string value1);
+        public event Dele2Main ContentRender;
 
-        public void initHook()
+        public void InitHook()
         {
+            mouseMonitor = new MouseMonitor();
 
         }
-        public int onMouseProc(int nCode, IntPtr wParam, IntPtr lParam)
+        public int OnMouseProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            /*
-            switch (wparam.toint32())
+            ContentRender(null);
+            switch (wParam.ToInt32())
             {
-                case mousemessage.wm_lbuttondown:
-                    //this.leftclickcount++;
-                    application.current.mainwindow.show();
-
+                case MouseMessage.WM_LBUTTONDOWN:
+                    //this.leftClickCount++;
+                    
+                    //floatingWindow();
                     break;
-                case mousemessage.wm_rbuttondown:
-                    //this.rightclickcount++;
+                case MouseMessage.WM_RBUTTONDOWN:
+                    //this.rightClickCount++;
+                    Application.Current.MainWindow.Hide();
                     break;
-                case mousemessage.wm_mbuttondown:
-                    //this.middleclickcount++;
-                    mousestate += 1;
-                    application.current.mainwindow.activate();
+                case MouseMessage.WM_MBUTTONDOWN:
+                    //this.middleClickCount++;
+                    mouseState += 1;
+                    //Application.Current.FloatingWindow.Show();
+                    Application.Current.MainWindow.Show();
+                    Application.Current.MainWindow.Activate();
 
                     break;
             }
-            */
+            //MainWindow.MouseStateLabel.Content = this.mouseState.ToString();
 
             //this.state.recordAction(wParam.ToInt32());
             return WinApi.CallNextHookEx(this.hMouseHook, nCode, wParam, lParam);
         }
 
-        private void formStartHook()
+        public void FormStartHook()
         {
-            this.hMouseHook = mouseMonitor.MouseHookStart(onMouseProc);
+            this.hMouseHook = mouseMonitor.MouseHookStart(OnMouseProc);
 
         }
 
-        private void formStopHook()
+        public void FormStopHook()
         {
             if (this.hMouseHook != 0)
             {
