@@ -62,48 +62,7 @@ namespace MouseNavigator_WPF
             this.MouseStateLabel.Content = mouseHook.mouseState.ToString();
 
         }
-        //private void formStartHook()
-        //{
-        //    this.hMouseHook = mouseMonitor.MouseHookStart(onMouseProc);
-
-        //}
-
-        //private void formStopHook()
-        //{
-        //    if (this.hMouseHook != 0)
-        //    {
-        //        WinApi.UnhookWindowsHookEx(this.hMouseHook);
-        //        //this.state.saveAction(DateTime.Today);
-
-
-        //    }
-        //}
-
-        //public int OnMouseProc(int nCode, IntPtr wParam, IntPtr lParam)
-        //{
-        //    switch (wParam.ToInt32())
-        //    {
-        //        case MouseMessage.WM_LBUTTONDOWN:
-        //            //this.leftClickCount++;
-
-        //            floatingWindow();
-        //            break;
-        //        case MouseMessage.WM_RBUTTONDOWN:
-        //            //this.rightClickCount++;
-        //            break;
-        //        case MouseMessage.WM_MBUTTONDOWN:
-        //            //this.middleClickCount++;
-        //            mouseState += 1;
-        //            Application.Current.MainWindow.Show();
-        //            Application.Current.MainWindow.Activate();
-
-        //            break;
-        //    }
-
-        //    this.MouseStateLabel.Content = this.mouseState.ToString();
-
-        //    return WinApi.CallNextHookEx(this.hMouseHook, nCode, wParam, lParam);
-        //}
+        
 
         private void ButtonUp_DragOver(object sender, DragEventArgs e)
         {
