@@ -22,6 +22,11 @@ namespace MouseNavigator_WPF
         public FloatingWindow()
         {
             InitializeComponent();
+
+            //this.Background = "Transparent";
+            this.WindowStyle = WindowStyle.None;
         }
+
+
     }
 }

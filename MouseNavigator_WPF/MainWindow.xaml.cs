@@ -53,6 +53,8 @@ namespace MouseNavigator_WPF
         public void FloatingWindow()
         {
             FloatingWindow floatingWindow = new FloatingWindow();
+
+
             floatingWindow.Show();
 
         }
@@ -72,8 +74,7 @@ namespace MouseNavigator_WPF
 
         private void ButtonUp_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("clicked\n!");
-
+            FloatingWindow();
             //Application.Current.MainWindow.Hide();
 
         }

@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MouseNavigator_WPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="鼠标悬浮球-设置" Height="450" Width="800">
     <Grid>
         <Label x:Name="MouseStateLabel" Width="60" Height="40" HorizontalAlignment="Center"/>
-        <Button x:Name="buttonUp" Width="80" Height="80" Content="button1" Margin="356,70,356,269" 
+        <Button x:Name="buttonUp" Width="160" Height="60" Content="启动悬浮窗（测试）" Margin="320,90,320,290" 
                 Click="ButtonUp_Click"/>
         
     </Grid>
