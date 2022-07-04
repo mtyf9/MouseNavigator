@@ -1,8 +1,11 @@
 ﻿// MouseNavigator_Cpp.cpp : 定义应用程序的入口点。
 //
 
-#include "framework.h"
+#include "pch.h"
 #include "MouseNavigator_Cpp.h"
+
+//using namespace winrt;
+//using namespace Windows::Foundation;
 
 #define MAX_LOADSTRING 100
 
@@ -32,6 +35,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     // TODO: 在此处放置代码。
+    winrt::init_apartment();
 
     // 初始化全局字符串
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -160,6 +164,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             
             RECT rect;
             GetClientRect(hWnd, &rect);
+            COLORREF brColor;
+            brColor = mouseClick % 2 ? RGB(36, 204, 40) : RGB(254, 243, 39);//前者是绿色，后者是黄色
+            hBr = CreateSolidBrush(brColor);
             FillRect(hdc, &rect, hBr);
 
             EndPaint(hWnd, &ps);
@@ -167,12 +174,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_LBUTTONDOWN:
-        mouseClick++;
         UINT msg;
-        COLORREF brColor;
         msg = WM_M0;
-        brColor = mouseClick % 2 ? RGB(36, 204, 40) : RGB(254, 243, 39);//前者是绿色，后者是黄色
-        hBr = CreateSolidBrush(brColor);
+
+        mouseClick++;
+
 
         //发送消息
         SendMessage(hWnd, msg, wParam, lParam);
@@ -182,7 +188,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_M0:
         //这里必须调用InvalidateRect和InvalidateRgn效果是一样的，只不过第二个参数要为NULL，因为我们希望整个窗口都会重绘
         InvalidateRgn(hWnd, NULL, TRUE);
-        InvalidateRect(hWnd, NULL, TRUE);
+        //InvalidateRect(hWnd, NULL, TRUE);
 
         break;
     case WM_DESTROY:
