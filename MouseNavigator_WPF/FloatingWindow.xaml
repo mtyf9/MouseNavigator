@@ -5,13 +5,52 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MouseNavigator_WPF"
         mc:Ignorable="d"
-        Title="FloatingWindow" Height="450" Width="800">
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ResizeMode="NoResize"
+        Width="300" Height="300">
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="50*"/>
-            <ColumnDefinition Width="23*"/>
-        </Grid.ColumnDefinitions>
-        <TextBox HorizontalAlignment="Left" Height="32" Margin="47,64,0,0" TextWrapping="Wrap" Text="{Binding Path=TextBoxValue}" VerticalAlignment="Top" Width="180" Grid.ColumnSpan="2"/>
-
+        <Ellipse Width="300" Height="300" Fill="#77FFFFFF"/>
+        <Button x:Name="Button12"
+        HorizontalAlignment="Center" VerticalAlignment="Top"
+        Margin="0,5,0,0" Content="Top Button"
+        Style="{DynamicResource FanShapeButtonStyle}"/>
+        
+        <Button x:Name="Button6"
+        HorizontalAlignment="Center" VerticalAlignment="Bottom"
+        Margin="0,5,0,0" Content="Bottom Button"
+        Style="{DynamicResource FanShapeButtonStyle}" RenderTransformOrigin="0.5,0.5">
+            <Button.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform/>
+                    <RotateTransform Angle="180"/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Button.RenderTransform>
+        </Button>
     </Grid>
+    
+    <Window.Resources>
+        <Style x:Key="FanShapeButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Path Fill="{TemplateBinding Background}" Stroke="Black"
+                          Data="M 0,50 A 50,50 0 0 1 100,50 L 0,50 Z" />
+                            <!-- 扇叶形状 -->
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="DarkGray" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </Window.Resources>
+
 </Window>

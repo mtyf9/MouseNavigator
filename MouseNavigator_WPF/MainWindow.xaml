@@ -7,7 +7,8 @@
         mc:Ignorable="d"
         Title="鼠标悬浮球-设置" Height="450" Width="800">
     <Grid>
-        <Label x:Name="MouseStateLabel" Width="60" Height="40" HorizontalAlignment="Center"/>
+        <Label x:Name="MouseStateLabel" Width="700" Height="40" HorizontalAlignment="Center"/>
+        <Label x:Name="MouseStateLabel2" Width="700" Height="40" HorizontalAlignment="Center" Margin="0,242,0,153"/>
         <Button x:Name="buttonUp" Width="160" Height="60" Content="启动悬浮窗（测试）" Margin="320,90,320,290" 
                 Click="ButtonUp_Click"/>
         

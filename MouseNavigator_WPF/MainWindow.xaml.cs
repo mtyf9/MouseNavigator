@@ -21,63 +21,66 @@ namespace MouseNavigator_WPF
     public partial class MainWindow : Window
     {
         private MouseHook mouseHook;
+        FloatingWindow floatingWindow;
 
         public MainWindow()
         {
             InitializeComponent();
+            //this.Visibility = Visibility.Hidden;
+
             //this.Closing += new System.ComponentModel.CancelEventHandler(MainWindow_Closing);
 
-            this.buttonUp.DragOver += ButtonUp_DragOver;
+            //floatingWindow = new FloatingWindow();
+            //floatingWindow.Visibility = Visibility.Collapsed;
 
+            this.buttonUp.DragOver += ButtonUp_DragOver;
 
             mouseHook = new MouseHook();
             mouseHook.InitHook();
             mouseHook.FormStartHook();
-            mouseHook.ContentRender += SetContent;
+            mouseHook.SetLabel += SetMouseStateLabel;
+            mouseHook.SetLabel2 += SetMouseStateLabel2;
+
         }
-        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show("确定是退出吗？", "询问", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-            //关闭窗口
-            if (result == MessageBoxResult.Yes)
-                e.Cancel = false;
-
-            //不关闭窗口
-            if (result == MessageBoxResult.No)
-                e.Cancel = true;
+            base.OnClosing(e);
+            //MessageBoxResult result = MessageBox.Show("确定是退出吗？", "询问", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            ////关闭窗口
+            //if (result == MessageBoxResult.Yes)
+            //    mouseHook.FormStopHook();
+            //    e.Cancel = false;
+            ////不关闭窗口
+            //if (result == MessageBoxResult.No)
+            //    e.Cancel = true;
 
             mouseHook.FormStopHook();
-
         }
-        public void FloatingWindow()
+
+        public void SetMouseStateLabel(string value)
         {
-            FloatingWindow floatingWindow = new FloatingWindow();
-
-
-            floatingWindow.Show();
-
+            //this.MouseStateLabel.Content = mouseHook.mouseState.ToString();
+            this.MouseStateLabel.Content = value;
         }
-
-        public void SetContent(string value1)
+        public void SetMouseStateLabel2(string value)
         {
-            this.MouseStateLabel.Content = mouseHook.mouseState.ToString();
-
+            this.MouseStateLabel2.Content = value;
         }
-        
 
         private void ButtonUp_DragOver(object sender, DragEventArgs e)
         {
             MessageBox.Show("drag\n!");
-            throw new NotImplementedException();
         }
 
         private void ButtonUp_Click(object sender, RoutedEventArgs e)
         {
-            FloatingWindow();
-            //Application.Current.MainWindow.Hide();
+            floatingWindow.Show();
+
+            Application.Current.MainWindow.Hide();
 
         }
+
 
 
 
