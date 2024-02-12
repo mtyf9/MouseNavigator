@@ -16,7 +16,6 @@ namespace MouseNavigator_WPF
     {
         private int hMouseHook;
         private MouseMonitor mouseMonitor;
-        private DpiScale dpi;
         private FloatingWindow fwindow;
         private bool fwindowShown;
         private int mouseState;
@@ -32,10 +31,7 @@ namespace MouseNavigator_WPF
             fwindow = new FloatingWindow();
             fwindowShown = false;
 
-            // 获取当前窗口的DPI信息
-            fwindow.Show();
-            dpi = GetDpi(fwindow);
-            fwindow.Visibility = Visibility.Hidden;
+
         }
         public void FormStartHook()
         {
@@ -71,12 +67,11 @@ namespace MouseNavigator_WPF
                 case MouseMessage.WM_MBUTTONDOWN:
                     mouseState += 1;
                     fwindowShown = true;
-
                     //Application.Current.MainWindow.Show();
                     //Application.Current.MainWindow.Activate();
 
                     // Set the window's position
-                    AdjustWindowPositionForDPI(pt.X, pt.Y);
+                    fwindow.AdjustWindowPositionForDPI(pt.X, pt.Y);
                     //SetLabel2(fwindow.Left + "," + fwindow.Top);
 
                     fwindow.Visibility = Visibility.Visible;
@@ -105,7 +100,7 @@ namespace MouseNavigator_WPF
                             }
                             else
                             {
-                                ActionButton = null;
+                                //ActionButton = null;
                             }
                             SetLabel2(ActionButton);
 
@@ -115,11 +110,13 @@ namespace MouseNavigator_WPF
                     break;
 
                 case MouseMessage.WM_MBUTTONUP:
-                    ActionButton = null;
                     fwindowShown = false;
                     fwindow.Visibility = Visibility.Hidden;
                     
+                    Console.WriteLine($"M button up, action {ActionButton}");
                     fwindow.PerformButtonAction(ActionButton);
+                    ActionButton = null;
+
                     break;
             }
             //MainWindow.MouseStateLabel.Content = this.mouseState.ToString();
@@ -144,38 +141,6 @@ namespace MouseNavigator_WPF
             }
         }
 
-
-        // 调整悬浮窗位置，考虑DPI缩放
-        public void AdjustWindowPositionForDPI(double mouseX, double mouseY)
-        {
-            // 将屏幕坐标转换为DPI感知的坐标
-            double scaledX = mouseX / dpi.DpiScaleX;
-            double scaledY = mouseY / dpi.DpiScaleY;
-
-            // 调整悬浮窗位置，使其居中于鼠标位置
-            fwindow.Left = scaledX - (fwindow.Width / 2);
-            fwindow.Top = scaledY - (fwindow.Height / 2);
-        }
-
-        // 获取指定窗口的DPI信息, .NET framework >= 4.6.2
-        private DpiScale GetDpi(Window window)
-        {
-            var windowHandle = new WindowInteropHelper(window).Handle;
-            var source = PresentationSource.FromVisual(window);
-            // 默认DPI信息，假设为96 DPI
-            //double dpiX = 96.0, dpiY = 96.0;
-            double dpiScaleX = 1, dpiScaleY = 1;
-
-            if (source != null && source.CompositionTarget != null)
-            {
-                dpiScaleX = source.CompositionTarget.TransformToDevice.M11;
-                dpiScaleY = source.CompositionTarget.TransformToDevice.M22;
-                // example: 1.5, 1.5
-            }
-
-            return new DpiScale(dpiScaleX, dpiScaleY);
-
-        }
 
     }
 }

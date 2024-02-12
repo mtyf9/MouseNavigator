@@ -10,14 +10,35 @@
         Width="300" Height="300">
     <Grid>
         <Ellipse Width="300" Height="300" Fill="#77FFFFFF"/>
+
+        <Button x:Name="Button0" Width="150" Height="150"
+        HorizontalAlignment="Center" VerticalAlignment="Center"
+        Margin="0,0,0,0" Content=""
+        Style="{DynamicResource CircularButtonStyle}"/>
+        
+
         <Button x:Name="Button12"
         HorizontalAlignment="Center" VerticalAlignment="Top"
-        Margin="0,5,0,0" Content="Top Button"
+        Margin="0,0,0,0" Content="Button Top"
         Style="{DynamicResource FanShapeButtonStyle}"/>
-        
+
+        <Button x:Name="Button3"
+        HorizontalAlignment="Right" VerticalAlignment="Center"
+        Margin="0,0,-25,0" Content="Botton Right"
+        Style="{DynamicResource FanShapeButtonStyle}" RenderTransformOrigin="0.5,0.5">
+            <Button.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform/>
+                    <RotateTransform Angle="90"/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Button.RenderTransform>
+        </Button>
+
         <Button x:Name="Button6"
         HorizontalAlignment="Center" VerticalAlignment="Bottom"
-        Margin="0,5,0,0" Content="Bottom Button"
+        Margin="0,0,0,0" Content="Button Bottom"
         Style="{DynamicResource FanShapeButtonStyle}" RenderTransformOrigin="0.5,0.5">
             <Button.RenderTransform>
                 <TransformGroup>
@@ -28,15 +49,42 @@
                 </TransformGroup>
             </Button.RenderTransform>
         </Button>
+
+        <Button x:Name="Button9"
+        HorizontalAlignment="Left" VerticalAlignment="Center"
+        Margin="-25,0,0,0" Content="Button Left"
+        Style="{DynamicResource FanShapeButtonStyle}" RenderTransformOrigin="0.5,0.5">
+            <Button.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform/>
+                    <RotateTransform Angle="270"/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Button.RenderTransform>
+        </Button>
     </Grid>
-    
+
     <Window.Resources>
+        <Style x:Key="CircularButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Ellipse Fill="{TemplateBinding Background}" Stroke="Transparent"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
         <Style x:Key="FanShapeButtonStyle" TargetType="Button">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid>
-                            <Path Fill="{TemplateBinding Background}" Stroke="Black"
+                            <Path Fill="{TemplateBinding Background}" Stroke="Transparent"
                           Data="M 0,50 A 50,50 0 0 1 100,50 L 0,50 Z" />
                             <!-- 扇叶形状 -->
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>

@@ -21,7 +21,7 @@ namespace MouseNavigator_WPF
     public partial class MainWindow : Window
     {
         private MouseHook mouseHook;
-        FloatingWindow floatingWindow;
+        //FloatingWindow floatingWindow;
 
         public MainWindow()
         {
@@ -75,7 +75,7 @@ namespace MouseNavigator_WPF
 
         private void ButtonUp_Click(object sender, RoutedEventArgs e)
         {
-            floatingWindow.Show();
+            //floatingWindow.Show();
 
             Application.Current.MainWindow.Hide();
 
