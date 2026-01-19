@@ -1,132 +1,66 @@
-﻿using System.Threading;
-using WindowsInput;
-using WindowsInput.Native;
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using Vanara.PInvoke;
 
-public class MouseKeyboardSimulator
+public static class MouseKeyboardSimulator
 {
-    static InputSimulator inputSimulator = new InputSimulator();
+    private static readonly User32.INPUT[] _singleKeyDownUp = new User32.INPUT[2];
 
-    public static void SimulateShortcut(params VirtualKeyCode[] keys)
+    public static void SimulateShortcut(params User32.VK[] keys)
     {
-        //Press keys
-        for (int i = 0; i < keys.Length; i++)
+        if (keys is null || keys.Length == 0)
         {
-            inputSimulator.Keyboard.KeyDown(keys[i]);
+            return;
         }
 
-        // Release keys in reverse order
-        for (int i = keys.Length - 1; i >= 0; i--)
+        var inputs = new List<User32.INPUT>(keys.Length * 2);
+
+        foreach (var key in keys)
         {
-            inputSimulator.Keyboard.KeyUp(keys[i]);
+            inputs.Add(CreateKeyInput(key, isKeyUp: false));
+        }
+
+        for (var i = keys.Length - 1; i >= 0; i--)
+        {
+            inputs.Add(CreateKeyInput(keys[i], isKeyUp: true));
+        }
+
+        var inputArray = inputs.ToArray();
+        var sent = User32.SendInput((uint)inputArray.Length, inputArray, Marshal.SizeOf<User32.INPUT>());
+        if (sent == 0)
+        {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
     }
 
-    public static void test()
+    public static void KeyPress(User32.VK key)
     {
-        //InputSimulator.SimulateTextEntry("Say hello!");
+        _singleKeyDownUp[0] = CreateKeyInput(key, isKeyUp: false);
+        _singleKeyDownUp[1] = CreateKeyInput(key, isKeyUp: true);
 
-        inputSimulator.Keyboard.KeyDown(VirtualKeyCode.LWIN);
-        inputSimulator.Keyboard.KeyPress(VirtualKeyCode.VK_D);
-        inputSimulator.Keyboard.KeyUp(VirtualKeyCode.LWIN);
+        var sent = User32.SendInput((uint)_singleKeyDownUp.Length, _singleKeyDownUp, Marshal.SizeOf<User32.INPUT>());
+        if (sent == 0)
+        {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
     }
-    //public static void SimulateSomeModifiedKeystrokes()
-    //{
-    //    // CTRL-C (effectively a copy command in many situations)
-    //    InputSimulator.SimulateModifiedKeyStroke(VirtualKeyCode.CONTROL, VirtualKeyCode.VK_C);
 
-    //    // You can simulate chords with multiple modifiers
-    //    // For example CTRL-K-C whic is simulated as
-    //    // CTRL-down, K, C, CTRL-up
-    //    InputSimulator.SimulateModifiedKeyStroke(VirtualKeyCode.CONTROL, new[] { VirtualKeyCode.VK_K, VirtualKeyCode.VK_C });
+    private static User32.INPUT CreateKeyInput(User32.VK key, bool isKeyUp)
+    {
+        return new User32.INPUT
+        {
+            type = User32.INPUTTYPE.INPUT_KEYBOARD,
+            ki = new User32.KEYBDINPUT
+            {
+                wVk = (ushort)key,
+                dwFlags = isKeyUp ? User32.KEYEVENTF.KEYEVENTF_KEYUP : 0,
+            },
+        };
+    }
 
-    //    // You can simulate complex chords with multiple modifiers and key presses
-    //    // For example CTRL-ALT-SHIFT-ESC-K which is simulated as
-    //    // CTRL-down, ALT-down, SHIFT-down, press ESC, press K, SHIFT-up, ALT-up, CTRL-up
-    //    InputSimulator.SimulateModifiedKeyStroke(
-    //      new[] { VirtualKeyCode.CONTROL, VirtualKeyCode.MENU, VirtualKeyCode.SHIFT },
-    //      new[] { VirtualKeyCode.ESCAPE, VirtualKeyCode.VK_K });
-    //}
-
-
-    //[DllImport("user32.dll", SetLastError = true)]
-    //private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
-    //private struct INPUT
-    //{
-    //    public int type;
-    //    public InputUnion U;
-    //}
-
-    //[StructLayout(LayoutKind.Explicit)]
-    //private struct InputUnion
-    //{
-    //    [FieldOffset(0)] public MOUSEINPUT mi;
-    //    [FieldOffset(0)] public KEYBDINPUT ki;
-    //    [FieldOffset(0)] public HARDWAREINPUT hi;
-    //}
-
-    //private struct MOUSEINPUT
-    //{
-    //    public int dx;
-    //    public int dy;
-    //    public uint mouseData;
-    //    public uint dwFlags;
-    //    public uint time;
-    //    public IntPtr dwExtraInfo;
-    //}
-
-    //private struct KEYBDINPUT
-    //{
-    //    public ushort wVk;
-    //    public ushort wScan;
-    //    public uint dwFlags;
-    //    public uint time;
-    //    public IntPtr dwExtraInfo;
-    //}
-
-    //private struct HARDWAREINPUT
-    //{
-    //    public uint uMsg;
-    //    public ushort wParamL;
-    //    public ushort wParamH;
-    //}
-
-    //private const int INPUT_KEYBOARD = 1;
-    //private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
-    //private const uint KEYEVENTF_KEYUP = 0x0002;
-
-    //// Virtual-Key Codes
-    //public const ushort VK_ALT = 0x12;
-    //public const ushort VK_TAB = 0x09;
-    //public const ushort VK_CONTROL = 0x11;
-    //public const ushort VK_SHIFT = 0x10;
-    //public const ushort VK_ESCAPE = 0x1B;
-    //public const ushort VK_LWIN = 0x5B;
-    //public const ushort VK_D = 0x44;
-
-    //public static void SimulateShortcut(params ushort[] keys)
-    //{
-    //    INPUT[] inputs = new INPUT[keys.Length * 2];
-    //    int inputIndex = 0;
-
-    //    // Press keys
-    //    for (int i = 0; i < keys.Length; i++)
-    //    {
-    //        inputs[inputIndex].type = INPUT_KEYBOARD;
-    //        inputs[inputIndex].U.ki.wVk = keys[i];
-    //        inputs[inputIndex].U.ki.dwFlags = 0; // KEYEVENTF_EXTENDEDKEY for Alt, Ctrl, etc.
-    //        inputIndex++;
-    //    }
-
-    //    // Release keys in reverse order
-    //    for (int i = keys.Length - 1; i >= 0; i--)
-    //    {
-    //        inputs[inputIndex].type = INPUT_KEYBOARD;
-    //        inputs[inputIndex].U.ki.wVk = keys[i];
-    //        inputs[inputIndex].U.ki.dwFlags = KEYEVENTF_KEYUP;
-    //        inputIndex++;
-    //    }
-
-    //    SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
-    //}
+    public static void TestShowDesktop()
+    {
+        SimulateShortcut(User32.VK.VK_LWIN, User32.VK.VK_D);
+    }
 }

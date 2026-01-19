@@ -13,8 +13,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using WindowsInput;
-using WindowsInput.Native;
+using Vanara.PInvoke;
 using static MouseNavigator_WPF.MouseHook;
 
 namespace MouseNavigator_WPF
@@ -59,40 +58,40 @@ namespace MouseNavigator_WPF
 
         private void Simulate_LastDesktop()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.CONTROL, VirtualKeyCode.LWIN, VirtualKeyCode.LEFT);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_CONTROL, User32.VK.VK_LWIN, User32.VK.VK_LEFT);
         }
         private void Simulate_NextDesktop()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.CONTROL, VirtualKeyCode.LWIN, VirtualKeyCode.RIGHT);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_CONTROL, User32.VK.VK_LWIN, User32.VK.VK_RIGHT);
         }
 
         private void Simulate_LastWindow()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.MENU, VirtualKeyCode.SHIFT, VirtualKeyCode.TAB);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_MENU, User32.VK.VK_SHIFT, User32.VK.VK_TAB);
             //switcher.SwitchToPreviousWindow();
         }
 
         private void Simulate_NextWindow()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.MENU, VirtualKeyCode.TAB);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_MENU, User32.VK.VK_TAB);
             //switcher.SwitchToNextWindow();
         }
 
         private void Simulate_MinimizeAll()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.LWIN, VirtualKeyCode.VK_M);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_LWIN, User32.VK.VK_M);
             //MouseKeyboardSimulator.test();
 
         }
 
         private void Simulate_Maximize()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.LWIN, VirtualKeyCode.UP);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_LWIN, User32.VK.VK_UP);
         }
 
         private void Simulate_Tasks()
         {
-            MouseKeyboardSimulator.SimulateShortcut(VirtualKeyCode.LWIN, VirtualKeyCode.TAB);
+            MouseKeyboardSimulator.SimulateShortcut(User32.VK.VK_LWIN, User32.VK.VK_TAB);
         }
 
         internal void PerformButtonAction(string buttonName)
