@@ -23,7 +23,10 @@ public static class ConfigurationCodec
         try { configuration = JsonSerializer.Deserialize<NavigatorConfiguration>(json, Options) ?? throw new ArgumentException("配置文件为空。"); }
         catch (JsonException ex) { throw new ArgumentException("配置文件格式不正确：" + ex.Message, ex); }
         Validate(configuration);
-        return configuration;
+        // Read-only migration: old cycle bindings now open the explicit window picker.
+        return configuration with { Profiles = configuration.Profiles.Select(p => p with {
+            Entries = p.Entries.Select(e => e.ActionId is "windows.window.previous" or "windows.window.next"
+                ? e with { ActionId = "windows.window.preview" } : e).ToArray() }).ToArray() };
     }
     public static string Serialize(NavigatorConfiguration configuration)
     {

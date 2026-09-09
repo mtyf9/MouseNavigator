@@ -26,20 +26,13 @@ internal static class Program
             var filtered = new FixtureCatalog(catalog, process.Id);
             var baseline = filtered.Enumerate();
             var platform = new PlatformActions(filtered);
-            var source = baseline[0].Identity.Handle;
-            var visited = new HashSet<nint>();
-            for (var step = 1; step <= 3; step++)
-            {
-                var result = platform.SwitchWindow(source, WindowDirection.Next);
-                Check(result.Succeeded, $"Native next activation {step}");
-                source = baseline[step % 3].Identity.Handle;
-                WaitForeground(source);
-                visited.Add(source);
-            }
-            Check(visited.Count == 3, "Three-window cycle visits every native window");
-            Check(platform.SwitchWindow(source, WindowDirection.Previous).Succeeded, "Native previous activation");
-            WaitForeground(baseline[2].Identity.Handle);
-            Check(!Native.IsIconic(handles[2]), "Minimized window was restored");
+            Native.ShowWindow(handles[2], 6);
+            var chosen = baseline.Single(w => w.Identity.Handle == handles[2]);
+            Check(platform.ActivateWindow(chosen.Identity).Succeeded, "Direct preview activation selects a minimized native window");
+            WaitForeground(chosen.Identity.Handle);
+            Check(!Native.IsIconic(chosen.Identity.Handle), "Direct preview activation restores the minimized target");
+            Check(!platform.ActivateWindow(new(chosen.Identity.Handle, 0)).Succeeded, "Direct activation rejects a mismatched process identity");
+            Check(!platform.ActivateWindow(new(0, 0)).Succeeded, "Direct activation rejects a missing window");
             var shortcutTarget = handles[1];
             Check(platform.SendShortcut(shortcutTarget, 0x11, 0x10, 0x53).Succeeded, "Custom Ctrl+Shift+S sends to fixture window");
             var received = process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
@@ -56,10 +49,10 @@ internal static class Program
             var dialogLine = process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
             var dialog = (nint)long.Parse(dialogLine!);
             WaitForeground(dialog);
-            Check(filtered.Enumerate().All(w => w.Identity.Handle != dialog), "Owned dialog is not a separate cycle entry");
-            var ownerIndex = baseline.ToList().FindIndex(w => w.Identity.Handle == handles[0]);
-            Check(platform.SwitchWindow(dialog, WindowDirection.Next).Succeeded, "Navigation from dialog resolves its owner");
-            WaitForeground(baseline[(ownerIndex + 1) % baseline.Count].Identity.Handle);
+            Check(filtered.Enumerate().All(w => w.Identity.Handle != dialog), "Owned dialog is not a separate preview entry");
+            Check(platform.ActivateWindow(baseline.Single(w => w.Identity.Handle == handles[0]).Identity).Succeeded,
+                "Direct preview activation follows the chosen window's owned dialog");
+            WaitForeground(dialog);
             Console.WriteLine("Windows smoke: all checks passed");
             return 0;
         }
@@ -128,6 +121,7 @@ internal static class Program
         [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
         [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
         [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
+        [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd, int command);
         [DllImport("user32.dll")] internal static extern bool IsIconic(nint hwnd);
         [DllImport("user32.dll")] internal static extern bool AllowSetForegroundWindow(uint pid);
     }

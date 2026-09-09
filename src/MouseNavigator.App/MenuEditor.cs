@@ -347,7 +347,7 @@ internal sealed class MenuEditor : UserControl
     internal async Task CheckOpenSelectionsForSmokeAsync(List<string> results)
     {
         var stableActions = true;
-        foreach (var id in new[] { "windows.maximize", "$shortcut", "", "windows.window.next", "$shortcut", "windows.tasks" })
+        foreach (var id in new[] { "windows.maximize", "$shortcut", "", "windows.maximize", "$shortcut", "windows.tasks" })
         {
             stableActions &= await SelectOpenItem(actionChoice, id);
             var entry = draft.Find(profileId).Entries.FirstOrDefault(e => e.Slot == selectedSlot);

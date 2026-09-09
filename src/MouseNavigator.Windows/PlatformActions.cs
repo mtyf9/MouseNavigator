@@ -5,30 +5,18 @@ using static MouseNavigator.Windows.NativeMethods;
 namespace MouseNavigator.Windows;
 public sealed class PlatformActions(IWindowCatalog catalog) : IPlatformActions
 {
-    private readonly WindowCycle cycle = new();
-    public ActionResult SwitchWindow(nint source, WindowDirection direction)
+    public ActionResult ActivateWindow(WindowIdentity identity)
     {
-        var windows = catalog.Enumerate();
-        // A modal dialog is represented by its owner in the navigation list.
-        if (!windows.Any(w => w.Identity.Handle == source))
-        {
-            var visited = new HashSet<nint> { source };
-            for (var owner = GetWindow(source, 4); owner != 0 && visited.Add(owner); owner = GetWindow(owner, 4))
-            {
-                if (!windows.Any(w => w.Identity.Handle == owner)) continue;
-                source = owner;
-                break;
-            }
-        }
-        var selected = cycle.Select(windows, source, direction);
-        if (selected is null) return ActionResult.Failure("当前桌面没有其他可切换的窗口。");
-        GetWindowThreadProcessId(selected.Identity.Handle, out var pid);
-        if (!IsWindow(selected.Identity.Handle) || pid != selected.Identity.ProcessId)
+        // Re-enumerate on commit: a closed/reused window or one moved to another desktop is invalid.
+        var selected = catalog.Enumerate().FirstOrDefault(w => w.Identity == identity);
+        if (selected is null) return ActionResult.Failure("目标窗口已关闭或不在当前桌面，请重新选择。");
+        GetWindowThreadProcessId(identity.Handle, out var pid);
+        if (!IsWindow(identity.Handle) || pid != identity.ProcessId)
             return ActionResult.Failure("目标窗口已关闭，请重试。");
-        var hwnd = selected.Identity.Handle;
+        var hwnd = identity.Handle;
         var popup = GetLastActivePopup(hwnd);
         if (popup != 0 && IsWindowVisible(popup)) hwnd = popup;
-        if (IsIconic(selected.Identity.Handle)) ShowWindowAsync(selected.Identity.Handle, 9);
+        if (IsIconic(identity.Handle)) ShowWindowAsync(identity.Handle, 9);
         return SetForegroundWindow(hwnd)
             ? ActionResult.Success($"已切换到 {selected.Title}")
             : ActionResult.Failure("Windows 未允许激活目标窗口，请重新触发手势。");

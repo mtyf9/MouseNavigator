@@ -52,7 +52,7 @@ public sealed partial class MainWindow : Window
         }
         try
         {
-            controller = new NavigationController(DispatcherQueue, catalog, registry, resolver);
+            controller = new NavigationController(DispatcherQueue, catalog, registry, resolver, platform.ActivateWindow);
             controller.ContextChanged += text => ContextText.Text = text;
             controller.Completed += result =>
             {

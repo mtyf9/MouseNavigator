@@ -8,48 +8,6 @@ void Equal<T>(T expected, T actual) { if (!EqualityComparer<T>.Default.Equals(ex
 void Throws(Action action) { try { action(); } catch (ArgumentException) { return; } throw new Exception("Expected ArgumentException"); }
 void Add(string name, Action run) => tests.Add((name, run));
 var context = new ApplicationContext(1, "Editor", "Document");
-Add("Empty window list is safe", () => Equal<WindowCandidate?>(null, new WindowCycle().Select([], 1, WindowDirection.Next)));
-Add("Single current window is a no-op", () => Equal<WindowCandidate?>(null, new WindowCycle().Select([W(1)], 1, WindowDirection.Next)));
-Add("Single other window can activate", () => Equal((nint)2, new WindowCycle().Select([W(2)], 1, WindowDirection.Next)!.Identity.Handle));
-Add("Forward traverses A B C A despite Z-order changes", () =>
-{
-    var cycle = new WindowCycle();
-    Equal((nint)2, cycle.Select([W(1), W(2), W(3)], 1, WindowDirection.Next)!.Identity.Handle);
-    Equal((nint)3, cycle.Select([W(2), W(1), W(3)], 2, WindowDirection.Next)!.Identity.Handle);
-    Equal((nint)1, cycle.Select([W(3), W(2), W(1)], 3, WindowDirection.Next)!.Identity.Handle);
-});
-Add("Previous reverses forward", () =>
-{
-    var cycle = new WindowCycle();
-    cycle.Select([W(1), W(2), W(3)], 1, WindowDirection.Next);
-    Equal((nint)1, cycle.Select([W(2), W(1), W(3)], 2, WindowDirection.Previous)!.Identity.Handle);
-    Equal((nint)3, cycle.Select([W(1), W(2), W(3)], 1, WindowDirection.Previous)!.Identity.Handle);
-});
-Add("Closed windows are removed", () =>
-{
-    var cycle = new WindowCycle();
-    cycle.Select([W(1), W(2), W(3)], 1, WindowDirection.Next);
-    Equal((nint)3, cycle.Select([W(1), W(3)], 1, WindowDirection.Next)!.Identity.Handle);
-});
-Add("New windows append without reordering", () =>
-{
-    var cycle = new WindowCycle();
-    cycle.Select([W(1), W(2)], 1, WindowDirection.Next);
-    Equal((nint)3, cycle.Select([W(3), W(2), W(1)], 2, WindowDirection.Next)!.Identity.Handle);
-});
-Add("Handle reuse with a new process is a new entry", () =>
-{
-    var cycle = new WindowCycle();
-    cycle.Select([W(1), W(2), W(3)], 1, WindowDirection.Next);
-    Equal((nint)3, cycle.Select([W(2, 7), W(1), W(3)], 1, WindowDirection.Next)!.Identity.Handle);
-});
-Add("Unknown source has deterministic direction", () =>
-{
-    Equal((nint)1, new WindowCycle().Select([W(1), W(2)], 99, WindowDirection.Next)!.Identity.Handle);
-    Equal((nint)2, new WindowCycle().Select([W(1), W(2)], 99, WindowDirection.Previous)!.Identity.Handle);
-});
-Add("Duplicate windows do not duplicate navigation", () =>
-    Equal((nint)2, new WindowCycle().Select([W(1), W(1), W(2)], 1, WindowDirection.Next)!.Identity.Handle));
 Add("Ring directions and cancellation", () =>
 {
     Equal<RingSlot?>(RingSlot.Right, RingGeometry.HitTest(100, 0));
@@ -59,8 +17,8 @@ Add("Ring directions and cancellation", () =>
     Equal<RingSlot?>(null, RingGeometry.HitTest(0, 0));
     Equal<RingSlot?>(null, RingGeometry.HitTest(158, 0));
 });
-MenuProfile Default() => new(1, "global", "Global", [], [new(RingSlot.Left, "windows.window.previous")]);
-MenuProfile Editor(string id, int priority = 0) => new(1, id, id, [new("editor.exe")], [new(RingSlot.Right, "windows.window.next")], priority);
+MenuProfile Default() => new(1, "global", "Global", [], [new(RingSlot.Left, "windows.tasks")]);
+MenuProfile Editor(string id, int priority = 0) => new(1, id, id, [new("editor.exe")], [new(RingSlot.Right, "windows.maximize")], priority);
 Add("Application matching is case-insensitive and accepts exe suffix", () =>
     Equal("editor", new ProfileResolver([Default(), Editor("editor")]).Resolve(context with { ProcessName = "EDITOR" }).Id));
 Add("Unknown application falls back", () =>
@@ -74,15 +32,6 @@ Add("Invalid profile versions rejected", () => Throws(() => new ProfileResolver(
 Add("Duplicate slots rejected", () => Throws(() => new ProfileResolver([Default() with { Entries = [new(RingSlot.Left, "a"), new(RingSlot.Left, "b")] }])));
 Add("Duplicate profile IDs rejected", () => Throws(() => new ProfileResolver([Default(), Default()])));
 Add("Missing fallback rejected", () => Throws(() => new ProfileResolver([Editor("e")])));
-Add("Plugin routes next and previous with original target", () =>
-{
-    var platform = new FakePlatform(); var registry = new ActionRegistry();
-    registry.Register(new WindowsPlugin(), platform);
-    Equal(true, registry.ExecuteAsync("windows.window.next", context).AsTask().GetAwaiter().GetResult().Succeeded);
-    Equal((nint)1, platform.Source); Equal(WindowDirection.Next, platform.Direction);
-    registry.ExecuteAsync("windows.window.previous", context).AsTask().GetAwaiter().GetResult();
-    Equal(WindowDirection.Previous, platform.Direction);
-});
 Add("Shortcut plugin captures the supplied platform", () =>
 {
     var platform = new FakePlatform(); var registry = new ActionRegistry();
@@ -97,13 +46,13 @@ Add("Duplicate plugin registration rejected atomically", () =>
     var registry = new ActionRegistry(); var platform = new FakePlatform();
     registry.Register(new WindowsPlugin(), platform);
     Throws(() => registry.Register(new WindowsPlugin(), platform));
-    Equal(7, registry.Actions.Count);
+    Equal(6, registry.Actions.Count);
 });
 Add("Canceled action does not reach native platform", () =>
 {
     var registry = new ActionRegistry(); var platform = new FakePlatform();
     registry.Register(new WindowsPlugin(), platform);
-    Equal(false, registry.ExecuteAsync("windows.window.next", context, new CancellationToken(true)).AsTask().GetAwaiter().GetResult().Succeeded);
+    Equal(false, registry.ExecuteAsync("windows.maximize", context, new CancellationToken(true)).AsTask().GetAwaiter().GetResult().Succeeded);
     Equal((nint)0, platform.Source);
 });
 Add("Plugin failures do not escape host", () =>
@@ -265,6 +214,82 @@ Add("Published example imports and matches Visual Studio with its save shortcut"
     var action = profile.Entries.Single(e => e.Slot == RingSlot.Top).ActionId;
     Equal("Ctrl + S", ShortcutKeys.Format(example.Shortcuts.Single(s => s.Id == action).Keys));
 });
+Add("Preview action declares held interaction instead of invoking a shortcut", () =>
+{
+    var registry = new ActionRegistry(); var platform = new FakePlatform();
+    registry.Register(new WindowsPlugin(), platform);
+    Equal(ActionInteraction.WindowPreview, registry.Find("windows.window.preview")!.Descriptor.Interaction);
+    Equal(false, registry.ExecuteAsync("windows.window.preview", context).AsTask().GetAwaiter().GetResult().Succeeded);
+    Equal(0, platform.Keys.Length);
+});
+Add("Preview freezes order and removes duplicate identities", () =>
+{
+    var preview = new WindowPreviewSession([W(3), W(1), W(3), W(2)], new(980, 640));
+    preview.RefreshAvailable([W(2), W(4), W(1), W(3)]);
+    Equal("3,1,2", string.Join(",", preview.Windows.Select(w => w.Identity.Handle)));
+});
+Add("Preview closed targets become empty without shifting adjacent cards", () =>
+{
+    var preview = new WindowPreviewSession([W(1), W(2), W(3)], new(980, 640));
+    preview.RefreshAvailable([W(1), W(3)]);
+    var second = preview.Layout.Card(1); var third = preview.Layout.Card(2);
+    Equal<WindowCandidate?>(null, preview.HitTest(second.X + 20, second.Y + 20));
+    Equal((nint)3, preview.HitTest(third.X + 20, third.Y + 20)!.Identity.Handle);
+});
+Add("Preview rejects handle reuse by another process", () =>
+{
+    var preview = new WindowPreviewSession([W(1)], new(980, 640));
+    preview.RefreshAvailable([W(1, 9)]);
+    var card = preview.Layout.Card(0);
+    Equal<WindowCandidate?>(null, preview.HitTest(card.X + 10, card.Y + 10));
+});
+Add("Preview header, gaps and outside positions never select a window", () =>
+{
+    var preview = new WindowPreviewSession([W(1), W(2)], new(980, 640));
+    Equal<WindowCandidate?>(null, preview.HitTest(100, 32));
+    Equal<WindowCandidate?>(null, preview.HitTest(-1, 100));
+    var first = preview.Layout.Card(0);
+    Equal<WindowCandidate?>(null, preview.HitTest(first.X + first.Width + 2, first.Y + 20));
+    Equal<WindowCandidate?>(null, preview.HitTest(30, 610));
+});
+Add("Preview pagination reaches every window and cannot leave bounds", () =>
+{
+    var preview = new WindowPreviewSession(Enumerable.Range(1, 37).Select(i => W(i)), new(980, 640));
+    var visited = new List<nint>();
+    do { visited.AddRange(preview.Visible.Select(w => w.Window.Identity.Handle)); }
+    while (preview.TurnPage(1));
+    Equal(37, visited.Count);
+    Equal(37, visited.Distinct().Count());
+    Equal(false, preview.TurnPage(1));
+    while (preview.TurnPage(-1)) { }
+    Equal(0, preview.Page);
+    Equal(false, preview.TurnPage(-1));
+});
+Add("Preview empty list still has a safe cancel page", () =>
+{
+    var preview = new WindowPreviewSession([], new(980, 640));
+    Equal(1, preview.PageCount);
+    Equal(false, preview.TurnPage(1));
+    Equal<WindowCandidate?>(null, preview.HitTest(100, 100));
+});
+Add("Preview cards fit narrow and high-DPI work areas", () =>
+{
+    foreach (var size in new[] { (240d, 240d), (400d, 320d), (620d, 480d), (980d, 640d) })
+    {
+        var layout = new WindowPreviewLayout(size.Item1, size.Item2);
+        for (var slot = 0; slot < layout.Capacity; slot++)
+        {
+            var rect = layout.Card(slot);
+            Equal(true, rect.X >= 0 && rect.Y >= 72 && rect.X + rect.Width <= layout.Width);
+            Equal(true, rect.Y + rect.Height <= layout.Previous.Y);
+        }
+    }
+});
+Add("Legacy cycle bindings migrate to the window picker", () =>
+{
+    var json = ConfigurationCodec.Serialize(Config()).Replace("windows.maximize", "windows.window.next").Replace("windows.tasks", "windows.window.previous");
+    Equal(true, ConfigurationCodec.Deserialize(json).Profiles.SelectMany(p => p.Entries).All(e => e.ActionId == "windows.window.preview"));
+});
 var failed = 0;
 foreach (var (name, run) in tests)
 {
@@ -277,9 +302,7 @@ return failed == 0 ? 0 : 1;
 sealed class FakePlatform : IPlatformActions
 {
     public nint Source;
-    public WindowDirection Direction;
     public ushort[] Keys = [];
-    public ActionResult SwitchWindow(nint source, WindowDirection direction) { Source = source; Direction = direction; return ActionResult.Success("ok"); }
     public ActionResult SendShortcut(nint source, params ushort[] keys) { Source = source; Keys = keys; return ActionResult.Success("ok"); }
 }
 sealed class ThrowingPlugin : INavigatorPlugin

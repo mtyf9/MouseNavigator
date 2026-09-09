@@ -8,11 +8,15 @@ namespace MouseNavigator.App;
 internal sealed class NavigationController : IDisposable
 {
     private readonly DispatcherQueue dispatcher;
-    private readonly WindowCatalog catalog;
+    private readonly IWindowCatalog catalog;
     private ActionRegistry registry;
     private ProfileResolver resolver;
     private readonly RingWindow ring;
     private readonly MiddleMouseHook hook;
+    private readonly Func<WindowIdentity, ActionResult> activateWindow;
+    private WindowPreviewWindow? preview;
+    private bool hasInteractiveAction;
+    private long previewRefreshAt;
     private readonly DispatcherQueueTimer escapeTimer;
     private readonly ConcurrentQueue<MouseSample> queue = new();
     private int scheduled;
@@ -24,9 +28,11 @@ internal sealed class NavigationController : IDisposable
     public event Action<string>? ContextChanged;
     public event Action<ActionResult>? Completed;
 
-    public NavigationController(DispatcherQueue dispatcher, WindowCatalog catalog, ActionRegistry registry, ProfileResolver resolver)
+    public NavigationController(DispatcherQueue dispatcher, IWindowCatalog catalog, ActionRegistry registry, ProfileResolver resolver,
+        Func<WindowIdentity, ActionResult>? activateWindow = null)
     {
         this.dispatcher = dispatcher; this.catalog = catalog; this.registry = registry; this.resolver = resolver;
+        this.activateWindow = activateWindow ?? new PlatformActions(catalog).ActivateWindow;
         ring = new RingWindow();
         try { hook = new MiddleMouseHook(); }
         catch { ring.Close(); throw; }
@@ -36,9 +42,21 @@ internal sealed class NavigationController : IDisposable
         escapeTimer.Tick += (_, _) =>
         {
             if (!active) return;
-            // The hook consumes middle-button input; asynchronous OS state is not the
-            // gesture's release signal. Only the queued Up/Cancel ends a held gesture.
-            if (MiddleMouseHook.EscapePressed) Cancel();
+            try
+            {
+                // The hook consumes middle input. Only actual Up/Cancel ends a held gesture.
+                if (MiddleMouseHook.EscapePressed) { Cancel(); return; }
+                if (preview?.IsOpen == true)
+                {
+                    if (Environment.TickCount64 >= previewRefreshAt)
+                    {
+                        preview.RefreshAvailable(catalog.Enumerate());
+                        previewRefreshAt = Environment.TickCount64 + 300;
+                    }
+                    preview.Tick();
+                }
+            }
+            catch (Exception ex) { Cancel(); Completed?.Invoke(ActionResult.Failure(ex.Message)); }
         };
         escapeTimer.Start();
     }
@@ -64,12 +82,12 @@ internal sealed class NavigationController : IDisposable
     private void Drain()
     {
         // Preserve every move until the ring opens: an outward-and-back batch must still trigger.
-        // Once visible, only the latest position is needed for highlighting.
+        // Interactive ring entries need every crossing; preview cards only need the final position.
         while (true)
         {
             while (queue.TryDequeue(out var sample))
             {
-                while (visible && sample.Phase == MousePhase.Move && queue.TryPeek(out var next) && next.Phase == MousePhase.Move)
+                while ((preview?.IsOpen == true || (visible && !hasInteractiveAction)) && sample.Phase == MousePhase.Move && queue.TryPeek(out var next) && next.Phase == MousePhase.Move)
                     queue.TryDequeue(out sample);
                 if (!disposed)
                 {
@@ -92,19 +110,45 @@ internal sealed class NavigationController : IDisposable
             scale = OverlayWindow.ScaleAt(sample.X, sample.Y);
             context = catalog.Capture(sample.Foreground);
             menu = resolver.Resolve(context);
+            hasInteractiveAction = menu.Entries.Any(e => registry.Find(e.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview);
             ring.SetMenu(menu, registry);
             ContextChanged?.Invoke($"{context.ProcessName} · {menu.Name}");
             return;
         }
         if (!active) return;
         if (MiddleMouseHook.EscapePressed) { Cancel(); return; }
+        if (preview?.IsOpen == true)
+        {
+            if (sample.Phase == MousePhase.Move) preview.MovePointer(sample.X, sample.Y);
+            if (sample.Phase == MousePhase.Up)
+            {
+                preview.RefreshAvailable(catalog.Enumerate());
+                var selectedWindow = preview.SelectionAt(sample.X, sample.Y);
+                Cancel();
+                if (selectedWindow is not null) Completed?.Invoke(activateWindow(selectedWindow.Identity));
+            }
+            return;
+        }
         if (sample.Phase == MousePhase.Move)
         {
             if (!visible && Math.Sqrt(Math.Pow(sample.X - originX, 2) + Math.Pow(sample.Y - originY, 2)) >= 10 * scale)
             {
                 ring.ShowAt(originX, originY); visible = true;
             }
-            if (visible) ring.Highlight(ring.HitTest(sample.X, sample.Y));
+            if (visible)
+            {
+                var slot = ring.HitTest(sample.X, sample.Y);
+                ring.Highlight(slot);
+                var entry = menu!.Entries.FirstOrDefault(e => e.Slot == slot);
+                if (entry is not null && registry.Find(entry.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview)
+                {
+                    preview ??= new WindowPreviewWindow();
+                    preview.ShowAt(sample.X, sample.Y, catalog.Enumerate());
+                    previewRefreshAt = Environment.TickCount64 + 300;
+                    ring.HideRing();
+                    visible = false;
+                }
+            }
         }
         if (sample.Phase == MousePhase.Up)
         {
@@ -129,6 +173,7 @@ internal sealed class NavigationController : IDisposable
     }
     internal bool RingVisibleForSmoke => visible && ring.AppWindow.IsVisible;
     internal bool GestureActiveForSmoke => active;
+    internal WindowPreviewWindow? PreviewForSmoke => preview;
 #endif
     private async void Execute(string id, ApplicationContext invocation)
     {
@@ -140,7 +185,7 @@ internal sealed class NavigationController : IDisposable
         }
         finally { busy = false; }
     }
-    private void Cancel() { active = false; visible = false; ring.HideRing(); }
+    private void Cancel() { active = false; visible = false; ring.HideRing(); preview?.HidePreview(); }
     public void Dispose()
     {
         if (disposed) return;
@@ -149,6 +194,7 @@ internal sealed class NavigationController : IDisposable
         hook.Input -= OnInput;
         hook.Dispose();
         Cancel();
+        preview?.Close();
         ring.Close();
     }
 }

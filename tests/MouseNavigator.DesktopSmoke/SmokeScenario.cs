@@ -34,6 +34,7 @@ internal static class SmokeScenario
             ring.Close();
             var results = new List<string> { noActivate ? "PASS: WinUI rendered; overlay did not activate." : "FAIL: overlay changed foreground." };
             await CheckMiddleGesturesAsync(main, results);
+            await CheckWindowPreviewAsync(main, directory, results);
             main.ShowEditorForSmoke();
             await main.EditorForSmoke.CheckOpenSelectionsForSmokeAsync(results);
             main.EditorForSmoke.EditShortcutForSmoke();
@@ -55,6 +56,114 @@ internal static class SmokeScenario
         }
         catch (Exception ex) { await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "FAIL: " + ex); }
         finally { main.CloseForSmoke(); }
+    }
+    private static async Task CheckWindowPreviewAsync(MainWindow main, string directory, List<string> results)
+    {
+        var sources = new List<Window>();
+        try
+        {
+            var candidates = new List<WindowCandidate>();
+            for (var i = 0; i < 3; i++)
+            {
+                var color = global::Windows.UI.Color.FromArgb(255, (byte)(32 + i * 45), (byte)(70 + i * 22), (byte)(130 + i * 25));
+                var grid = new Microsoft.UI.Xaml.Controls.Grid { Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color) };
+                grid.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock {
+                    Text = $"预览测试窗口 {i + 1}\n保持中键 · 移动选择 · 松开切换", FontSize = 26, TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(24), VerticalAlignment = VerticalAlignment.Center });
+                var window = new Window { Title = "Preview fixture " + (i + 1), Content = grid };
+                sources.Add(window);
+                var handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                OverlayWindow.Configure(handle);
+                OverlayWindow.ShowPanel(handle, new(80 + i * 60, 140 + i * 40, 440, 280, 1));
+                candidates.Add(new(new(handle, (uint)Environment.ProcessId), window.Title));
+            }
+            await Task.Delay(300);
+            var catalog = new PreviewFixtureCatalog(candidates);
+            var registry = new ActionRegistry();
+            registry.Register(new WindowsPlugin(), new RecordingPlatform());
+            var activations = new List<WindowIdentity>();
+            using var controller = new NavigationController(main.DispatcherQueue, catalog, registry,
+                new ProfileResolver(DefaultProfiles.Create()), identity => { activations.Add(identity); return ActionResult.Success("Recorded activation"); });
+            controller.Completed += result => { if (!result.Succeeded) results.Add("FAIL: Preview controller: " + result.Message); };
+            var x = main.AppWindow.Position.X + main.AppWindow.Size.Width / 2;
+            var y = main.AppWindow.Position.Y + main.AppWindow.Size.Height / 2;
+            var up = y - (int)(90 * OverlayWindow.ScaleAt(x, y));
+            void Check(bool value, string text) => results.Add((value ? "PASS: " : "FAIL: ") + text);
+            async Task Open()
+            {
+                controller.QueueForSmoke(new MouseSample(MousePhase.Down, x, y, candidates[0].Identity.Handle),
+                    new MouseSample(MousePhase.Move, x, up, 0));
+                await Task.Delay(180);
+            }
+            var before = WindowCatalog.Foreground;
+            await Open();
+            var preview = controller.PreviewForSmoke!;
+            Check(preview.IsOpen && !controller.RingVisibleForSmoke, "Entering preview opens the panel while middle remains held");
+            Check(WindowCatalog.Foreground == before, "Window preview does not steal foreground");
+            Check(preview.ThumbnailCountForSmoke == 3, "DWM registers and positions three live window thumbnails");
+            await Task.Delay(700);
+            Check(preview.IsOpen, "Window preview remains visible during a stationary hold");
+            controller.QueueForSmoke(new MouseSample(MousePhase.Up, x, up, 0));
+            await Task.Delay(80);
+            Check(!preview.IsOpen && activations.Count == 0, "Immediate release after opening does not select an accidental target");
+
+            await Open();
+            var target = preview.CardPointForSmoke(1);
+            controller.QueueForSmoke(new MouseSample(MousePhase.Move, target.X, target.Y, 0));
+            await Task.Delay(120);
+            Check(activations.Count == 0 && preview.SelectionAt(target.X, target.Y)?.Identity == candidates[1].Identity,
+                "Moving over a thumbnail highlights without activating");
+            await RenderAsync((FrameworkElement)preview.Content, Path.Combine(directory, "window-preview.png"));
+            controller.QueueForSmoke(new MouseSample(MousePhase.Up, target.X, target.Y, 0), new MouseSample(MousePhase.Up, target.X, target.Y, 0));
+            await Task.Delay(80);
+            Check(activations.Count == 1 && activations[0] == candidates[1].Identity && !preview.IsOpen && preview.ThumbnailCountForSmoke == 0,
+                $"Release activates exactly the selected window once and releases thumbnails (activations={activations.Count}, open={preview.IsOpen}, thumbnails={preview.ThumbnailCountForSmoke})");
+
+            await Open();
+            target = preview.CardPointForSmoke(1);
+            controller.QueueForSmoke(new MouseSample(MousePhase.Move, target.X, target.Y, 0));
+            await Task.Delay(80);
+            catalog.Current = [candidates[0], candidates[2]];
+            controller.QueueForSmoke(new MouseSample(MousePhase.Up, target.X, target.Y, 0));
+            await Task.Delay(80);
+            Check(activations.Count == 1, "A window closed before release cannot be activated");
+            catalog.Current = candidates;
+            await Open();
+            controller.QueueForSmoke(new MouseSample(MousePhase.Move, x + 5000, y + 5000, 0), new MouseSample(MousePhase.Up, x + 5000, y + 5000, 0));
+            await Task.Delay(80);
+            Check(!preview.IsOpen && activations.Count == 1, "Release outside preview cancels");
+            await Open();
+            controller.Enabled = false;
+            Check(!preview.IsOpen && preview.ThumbnailCountForSmoke == 0, "Pausing closes preview and disposes native thumbnails");
+            controller.Enabled = true;
+            await Open();
+            controller.QueueForSmoke(new MouseSample(MousePhase.Cancel, x, y, 0));
+            await Task.Delay(80);
+            Check(!preview.IsOpen && activations.Count == 1, "Explicit cancellation closes preview without switching");
+            // Extra entries exercise paging even on the largest supported panel.
+            catalog.Current = candidates.Concat(Enumerable.Range(1, 20).Select(i =>
+                new WindowCandidate(new((nint)(-i), 0), "Unavailable fixture " + i))).ToArray();
+            await Open();
+            var footer = preview.NextPagePointForSmoke;
+            controller.QueueForSmoke(new MouseSample(MousePhase.Move, footer.X, footer.Y, 0));
+            await Task.Delay(850);
+            Check(preview.PageForSmoke == 1 && activations.Count == 1, "Holding over the footer advances one page without activating a window");
+            controller.ApplyConfiguration(registry, new ProfileResolver(DefaultProfiles.Create()));
+            Check(!preview.IsOpen && preview.ThumbnailCountForSmoke == 0, "Configuration changes cancel preview and dispose thumbnails");
+            catalog.Current = [];
+            await Open();
+            Check(preview.IsOpen && preview.ThumbnailCountForSmoke == 0, "An empty desktop displays a safe empty preview");
+            controller.QueueForSmoke(new MouseSample(MousePhase.Up, x, up, 0));
+            await Task.Delay(80);
+            Check(!preview.IsOpen && activations.Count == 1, "Empty preview release cancels without activation");
+        }
+        finally { foreach (var source in sources) source.Close(); }
+    }
+    private sealed class PreviewFixtureCatalog(IReadOnlyList<WindowCandidate> windows) : IWindowCatalog
+    {
+        public IReadOnlyList<WindowCandidate> Current { get; set; } = windows;
+        public IReadOnlyList<WindowCandidate> Enumerate() => Current;
+        public MouseNavigator.Contracts.ApplicationContext Capture(nint hwnd) => new(hwnd, "preview-fixture", "Preview fixture");
     }
     private static async Task CheckMiddleGesturesAsync(MainWindow main, List<string> results)
     {
@@ -153,15 +262,11 @@ internal static class SmokeScenario
     private sealed class RecordingPlatform : IPlatformActions
     {
         public int Calls { get; private set; }
-        public ActionResult SwitchWindow(nint source, WindowDirection direction)
-        {
-            Calls++;
-            return ActionResult.Success("Recorded window switch");
-        }
         public List<ushort[]> Shortcuts { get; } = [];
         public ActionResult SendShortcut(nint source, params ushort[] keys)
         {
-            Shortcuts.Add(keys.ToArray());
+            if (keys.SequenceEqual(new ushort[] { 0x5B, 0x26 })) Calls++;
+            else Shortcuts.Add(keys.ToArray());
             return ActionResult.Success("Recorded shortcut");
         }
     }

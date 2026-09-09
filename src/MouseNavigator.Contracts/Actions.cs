@@ -7,9 +7,11 @@ public sealed record ActionResult(bool Succeeded, string Message)
     public static ActionResult Failure(string message) => new(false, message);
 }
 
-public sealed record ActionDescriptor(string Id, string Name, string Glyph, string Description);
+public enum ActionInteraction { Invoke, WindowPreview }
+public sealed record ActionDescriptor(string Id, string Name, string Glyph, string Description,
+    ActionInteraction Interaction = ActionInteraction.Invoke);
 
-/// <summary>Stable action IDs belong to a plugin namespace, e.g. windows.window.next.</summary>
+/// <summary>Stable action IDs belong to a plugin namespace, e.g. windows.window.preview.</summary>
 public interface INavigatorAction
 {
     ActionDescriptor Descriptor { get; }
@@ -24,10 +26,8 @@ public interface INavigatorPlugin
     IReadOnlyList<INavigatorAction> CreateActions(IPlatformActions platform);
 }
 
-public enum WindowDirection { Previous = -1, Next = 1 }
 public interface IPlatformActions
 {
-    ActionResult SwitchWindow(nint source, WindowDirection direction);
     ActionResult SendShortcut(nint source, params ushort[] keys);
 }
 

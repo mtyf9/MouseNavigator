@@ -20,6 +20,7 @@ internal sealed class RingWindow : Window
     private readonly Dictionary<RingSlot, TextBlock> labels = [];
     private readonly Dictionary<RingSlot, FontIcon> icons = [];
     private readonly TextBlock center = new() { Text = "取消", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    private readonly HashSet<RingSlot> interactiveSlots = [];
     private readonly nint hwnd;
     private OverlayPlacement placement;
 
@@ -58,10 +59,12 @@ internal sealed class RingWindow : Window
 
     public void SetMenu(MenuProfile menu, ActionRegistry registry)
     {
+        interactiveSlots.Clear();
         foreach (var slot in Enum.GetValues<RingSlot>())
         {
             var entry = menu.Entries.FirstOrDefault(e => e.Slot == slot);
             var action = entry is null ? null : registry.Find(entry.ActionId);
+            if (action?.Descriptor.Interaction == ActionInteraction.WindowPreview) interactiveSlots.Add(slot);
             labels[slot].Text = action?.Descriptor.Name ?? (entry is null ? "未配置" : "动作不可用");
             icons[slot].Glyph = action?.Descriptor.Glyph ?? "\uE711";
         }
@@ -78,7 +81,7 @@ internal sealed class RingWindow : Window
     {
         foreach (var (slot, sector) in sectors)
             sector.Fill = slot == selected ? new SolidColorBrush(Color.FromArgb(255, 57, 104, 183)) : IdleBrush();
-        center.Text = selected is null ? "取消" : "松开执行";
+        center.Text = selected is null ? "取消" : interactiveSlots.Contains(selected.Value) ? "进入预览" : "松开执行";
     }
     private static SolidColorBrush IdleBrush() => new(Color.FromArgb(255, 39, 45, 58));
     private static PathGeometry Wedge(double angle)

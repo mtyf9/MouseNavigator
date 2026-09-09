@@ -9,8 +9,8 @@ public sealed class WindowsPlugin : INavigatorPlugin
         INavigatorAction Shortcut(string id, string name, string glyph, params ushort[] keys) =>
             new Action(new("windows." + id, name, glyph, name), c => platform.SendShortcut(c.WindowHandle, keys));
         return [
-            new Action(new("windows.window.previous", "上一个窗口", "\uE76B", "按稳定顺序向左切换窗口"), c => platform.SwitchWindow(c.WindowHandle, WindowDirection.Previous)),
-            new Action(new("windows.window.next", "下一个窗口", "\uE76C", "按稳定顺序向右切换窗口"), c => platform.SwitchWindow(c.WindowHandle, WindowDirection.Next)),
+            new Action(new("windows.window.preview", "窗口预览", "\uE7C4", "保持按住中键，移到窗口缩略图后松开切换", ActionInteraction.WindowPreview),
+                _ => ActionResult.Failure("请保持按住中键，移入窗口预览区域后选择窗口。")),
             Shortcut("tasks", "任务视图", "\uE7C4", 0x5B, 0x09),
             Shortcut("minimizeAll", "全部最小化", "\uE921", 0x5B, 0x4D),
             Shortcut("maximize", "最大化窗口", "\uE922", 0x5B, 0x26),
