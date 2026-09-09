@@ -1,0 +1,18 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/MouseNavigator.Contracts/MouseNavigator.Contracts.csproj" />
+    <Project Path="src/MouseNavigator.Core/MouseNavigator.Core.csproj" />
+    <Project Path="src/MouseNavigator.Windows/MouseNavigator.Windows.csproj" />
+    <Project Path="src/MouseNavigator.Actions.BuiltIn/MouseNavigator.Actions.BuiltIn.csproj" />
+    <Project Path="src/MouseNavigator.App/MouseNavigator.App.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MouseNavigator.Tests/MouseNavigator.Tests.csproj" />
+    <Project Path="tests/MouseNavigator.WindowsSmoke/MouseNavigator.WindowsSmoke.csproj" />
+  </Folder>
+</Solution>

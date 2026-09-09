@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "schemaVersion": 1,
+      "id": "global",
+      "name": "全局导航",
+      "applications": [],
+      "entries": [
+        { "slot": "Top", "actionId": "windows.tasks" },
+        { "slot": "Right", "actionId": "windows.window.next" },
+        { "slot": "Bottom", "actionId": "windows.minimizeAll" },
+        { "slot": "Left", "actionId": "windows.window.previous" }
+      ],
+      "priority": 0
+    },
+    {
+      "schemaVersion": 1,
+      "id": "editor",
+      "name": "代码编辑器",
+      "applications": [ { "processName": "Code.exe" }, { "processName": "devenv.exe" } ],
+      "entries": [
+        { "slot": "Top", "actionId": "shortcuts.editor.save" },
+        { "slot": "Right", "actionId": "windows.window.next" },
+        { "slot": "Left", "actionId": "windows.window.previous" }
+      ],
+      "priority": 10
+    }
+  ],
+  "shortcuts": [
+    { "id": "shortcuts.editor.save", "name": "保存文件", "keys": [17, 83] }
+  ]
+}

@@ -1,0 +1,65 @@
+<Window
+    x:Class="MouseNavigator.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="MouseNavigator">
+  <Grid Background="Transparent" RequestedTheme="Dark">
+    <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Grid x:Name="TitleBar" Padding="20,0"><StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <FontIcon Glyph="&#xE962;" FontSize="17"/><TextBlock Text="MouseNavigator" FontWeight="SemiBold"/>
+    </StackPanel></Grid>
+    <NavigationView x:Name="Navigation" Grid.Row="1" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" OpenPaneLength="210" SelectionChanged="Navigation_SelectionChanged">
+      <NavigationView.Resources>
+        <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#293E5E"/>
+        <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#355177"/>
+        <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#203650"/>
+        <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#FFFFFF"/>
+      </NavigationView.Resources>
+      <NavigationView.MenuItems>
+        <NavigationViewItem Content="悬浮导航" Icon="Home" Tag="home" IsSelected="True"/>
+        <NavigationViewItem Content="应用菜单" Icon="AllApps" Tag="profiles"/>
+        <NavigationViewItem Content="动作库" Icon="Library" Tag="actions"/>
+      </NavigationView.MenuItems>
+      <ScrollViewer x:Name="PageScroll">
+        <StackPanel Padding="36,24,36,32" Spacing="24" MaxWidth="1060" HorizontalAlignment="Stretch">
+          <StackPanel x:Name="HomePage" Spacing="24">
+            <StackPanel Spacing="8">
+              <TextBlock Text="让操作跟随鼠标" FontSize="32" FontWeight="SemiBold"/>
+              <TextBlock Text="按住中键，移向一个方向，松开即可执行。" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="15"/>
+            </StackPanel>
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="16" Padding="24">
+              <Grid ColumnSpacing="24"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Spacing="8"><TextBlock Text="中键悬浮球" FontSize="20" FontWeight="SemiBold"/>
+                  <TextBlock Text="轻点保留普通中键点击；拖动唤出菜单。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <ToggleSwitch x:Name="EnabledSwitch" Grid.Column="1" IsOn="True" OnContent="已启用" OffContent="已暂停" Toggled="EnabledSwitch_Toggled"/>
+              </Grid>
+            </Border>
+            <Grid ColumnSpacing="24"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="24">
+                <StackPanel Spacing="16"><TextBlock Text="左右切换窗口" TextWrapping="Wrap" FontSize="20" FontWeight="SemiBold"/>
+                  <StackPanel Orientation="Horizontal" Spacing="16"><FontIcon Glyph="&#xE76B;" FontSize="28"/><TextBlock Text="当前桌面的窗口" VerticalAlignment="Center"/><FontIcon Glyph="&#xE76C;" FontSize="28"/></StackPanel>
+                  <TextBlock Text="连续向右遍历窗口，向左返回。最小化的窗口会自动恢复。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="24">
+                <StackPanel Spacing="16"><TextBlock Text="随应用变化的菜单" TextWrapping="Wrap" FontSize="20" FontWeight="SemiBold"/>
+                  <TextBlock Text="触发时识别当前应用，自动使用对应菜单；其他应用使用全局导航。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                  <TextBlock Text="移回中心、移出圆环或按 Esc 可取消。" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Border>
+            </Grid>
+            <InfoBar x:Name="StatusBar" IsOpen="True" IsClosable="False" Severity="Informational" Title="准备就绪" Message="切换到任意应用，按住中键并移动试试。"/>
+            <StackPanel Spacing="8"><TextBlock Text="最近一次导航" FontWeight="SemiBold"/><TextBlock x:Name="ContextText" Text="尚未触发" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+          </StackPanel>
+          <StackPanel x:Name="ProfilesPage" Visibility="Collapsed" Spacing="20"/>
+          <StackPanel x:Name="ActionsPage" Visibility="Collapsed" Spacing="20">
+            <TextBlock Text="动作库" FontSize="32" FontWeight="SemiBold"/>
+            <TextBlock Text="已接入的 Windows 操作，可供应用菜单使用。" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <StackPanel x:Name="ActionsList" Spacing="12"/>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </NavigationView>
+  </Grid>
+</Window>
