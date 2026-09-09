@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 # Local development notes, design sources and recovery backups
 /local-dev/
+.vscode/
