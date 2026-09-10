@@ -31,8 +31,13 @@ public interface IPlatformActions
     ActionResult SendShortcut(nint source, params ushort[] keys);
 }
 
-public enum RingSlot { Top, Right, Bottom, Left }
-public sealed record MenuEntry(RingSlot Slot, string ActionId);
+
+public sealed record MenuEntry(string Id, string ActionId, string? Label = null, string? Glyph = null, int Ring = 0, string? Image = null);
 public sealed record ApplicationMatch(string ProcessName);
 public sealed record MenuProfile(int SchemaVersion, string Id, string Name,
-    IReadOnlyList<ApplicationMatch> Applications, IReadOnlyList<MenuEntry> Entries, int Priority = 0);
+    IReadOnlyList<ApplicationMatch> Applications, IReadOnlyList<MenuEntry> Entries, int Priority = 0, int RingCount = 1, string? CenterText = null, string? CenterImage = null, string? CenterGlyph = null,
+    bool Enabled = true, bool? IsGlobalDefault = null, IReadOnlyDictionary<int,double>? RingRotations = null, double SizeScale = 1)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsDefault => IsGlobalDefault ?? Applications.Count == 0;
+}

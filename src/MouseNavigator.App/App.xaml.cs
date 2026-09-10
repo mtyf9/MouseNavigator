@@ -27,14 +27,18 @@ public partial class App : Application
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        instance = new Mutex(true, @"Local\MouseNavigator.WinUI3", out var first);
+        var mutexName = @"Local\MouseNavigator.WinUI3";
+#if DEBUG
+        var arguments = Environment.GetCommandLineArgs();
+        var smoke = Array.IndexOf(arguments, "--smoke-test");
+        if (smoke >= 0 && smoke + 1 < arguments.Length) mutexName += ".Smoke." + Environment.ProcessId;
+#endif
+        instance = new Mutex(true, mutexName, out var first);
         if (!first) { instance.Dispose(); Exit(); return; }
         window = new MainWindow();
         window.Closed += (_, _) => { instance.ReleaseMutex(); instance.Dispose(); };
         window.Activate();
 #if DEBUG
-        var arguments = Environment.GetCommandLineArgs();
-        var smoke = Array.IndexOf(arguments, "--smoke-test");
         if (smoke >= 0 && smoke + 1 < arguments.Length)
         {
             window.PauseForSmoke();

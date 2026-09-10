@@ -27,7 +27,7 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         var scale = OverlayWindow.WindowScale(WinRT.Interop.WindowNative.GetWindowHandle(this));
         var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
-        var width = Math.Min((int)(1120 * scale), area.Width - (int)(32 * scale));
+        var width = Math.Min((int)(1280 * scale), area.Width - (int)(32 * scale));
         var height = Math.Min((int)(760 * scale), area.Height - (int)(32 * scale));
         AppWindow.MoveAndResize(new(area.X + (area.Width - width) / 2, area.Y + (area.Height - height) / 2, width, height));
         catalog = new WindowCatalog();
@@ -39,11 +39,17 @@ public sealed partial class MainWindow : Window
         editor = new MenuEditor(loaded.Configuration, registry.Actions
             .Where(a => !a.Descriptor.Id.StartsWith("shortcuts.", StringComparison.Ordinal)).Select(a => a.Descriptor).ToArray())
         {
+            OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this),
             SaveRequested = SaveConfigurationAsync,
             ImportRequested = ImportConfigurationAsync,
-            ExportRequested = ExportConfigurationAsync
+            PickImageRequested = PickIconAsync,
+            ExportRequested = ExportConfigurationAsync,
+            PickProgramsRequested = PickProgramsAsync,
+            ImportMenuRequested = ImportMenuAsync,
+            ExportMenuRequested = ExportMenuAsync
         };
         ProfilesPage.Children.Add(editor);
+        AppWindow.Changed+=(_,_)=>editor.RefreshDisplaySize();
         RefreshActions();
         if (loaded.Warning is not null)
         {
@@ -71,7 +77,7 @@ public sealed partial class MainWindow : Window
         }
         AppWindow.Closing += async (_, args) =>
         {
-            if (!editor.IsEnabled) { args.Cancel = true; return; }
+            if (!editor.IsEnabled || editor.HasOpenDialog) { args.Cancel = true; return; }
             if (closeApproved || !editor.IsDirty) return;
             args.Cancel = true;
             if (closeDialogOpen) return;
@@ -95,7 +101,8 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { editor.Notify(ex.Message, InfoBarSeverity.Error); }
             finally { closeDialogOpen = false; }
         };
-        Closed += (_, _) => { controller?.Dispose(); catalog.Dispose(); };
+        Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)editor.StopRecording();};
+        Closed += (_, _) => { editor.StopRecording();controller?.Dispose(); catalog.Dispose(); };
     }
 
     private static ConfigurationStore CreateStore()
@@ -145,6 +152,36 @@ public sealed partial class MainWindow : Window
         if (file is null) return;
         await FileIO.WriteTextAsync(file, json);
         editor.Notify("菜单配置已导出，可在其他电脑导入。", InfoBarSeverity.Success);
+    }
+    private async Task<IReadOnlyList<string>> PickProgramsAsync()
+    {
+        var picker=new FileOpenPicker();picker.FileTypeFilter.Add(".exe");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var files=await picker.PickMultipleFilesAsync();return files.Select(f=>f.Name).ToArray();
+    }
+    private async Task<MenuDocument?> ImportMenuAsync()
+    {
+        var picker=new FileOpenPicker();picker.FileTypeFilter.Add(".json");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file=await picker.PickSingleFileAsync();if(file is null)return null;
+        if((await file.GetBasicPropertiesAsync()).Size>ConfigurationCodec.MaximumBytes)throw new ArgumentException("菜单文件不能超过 16 MB。");
+        return MenuDocumentCodec.Deserialize(await FileIO.ReadTextAsync(file));
+    }
+    private async Task ExportMenuAsync(MenuDocument document)
+    {
+        var json=MenuDocumentCodec.Serialize(document);
+        var safeName=string.Concat(document.Menu.Name.Select(c=>Path.GetInvalidFileNameChars().Contains(c)?'_':c));
+        var picker=new FileSavePicker{SuggestedFileName=safeName};picker.FileTypeChoices.Add("悬浮菜单",new List<string>{".json"});
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file=await picker.PickSaveFileAsync();if(file is not null)await FileIO.WriteTextAsync(file,json);
+    }
+    private async Task<string?> PickIconAsync()
+    {
+        var picker=new FileOpenPicker();
+        foreach(var ext in new[]{".png",".jpg",".jpeg",".bmp",".ico"})picker.FileTypeFilter.Add(ext);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file=await picker.PickSingleFileAsync();
+        return file is null?null:await ButtonIcons.ImportAsync(file);
     }
     private void RefreshActions()
     {

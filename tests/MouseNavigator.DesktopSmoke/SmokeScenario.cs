@@ -17,6 +17,36 @@ internal static class SmokeScenario
         Directory.CreateDirectory(directory);
         try
         {
+            if(Environment.GetCommandLineArgs().Contains("--inner-ring-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckInnerRingAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--layout-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckLayoutAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--management-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckManagementAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--center-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckCenterOptionsAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--editor-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckStationaryDragAndCenterAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
             await Task.Delay(700);
             await RenderAsync((FrameworkElement)main.Content, Path.Combine(directory, "home.png"));
             using var catalog = new WindowCatalog();
@@ -26,7 +56,7 @@ internal static class SmokeScenario
             var before = WindowCatalog.Foreground;
             ring.SetMenu(DefaultProfiles.Create()[0], registry);
             ring.ShowAt(600, 420);
-            ring.Highlight(RingSlot.Right);
+            ring.Highlight("right");
             await Task.Delay(400);
             var noActivate = WindowCatalog.Foreground == before;
             await RenderAsync((FrameworkElement)ring.Content, Path.Combine(directory, "ring.png"));
@@ -35,13 +65,38 @@ internal static class SmokeScenario
             var results = new List<string> { noActivate ? "PASS: WinUI rendered; overlay did not activate." : "FAIL: overlay changed foreground." };
             await CheckMiddleGesturesAsync(main, results);
             await CheckWindowPreviewAsync(main, directory, results);
+            await CheckDynamicRingAsync(main, results);
             main.ShowEditorForSmoke();
             await main.EditorForSmoke.CheckOpenSelectionsForSmokeAsync(results);
+            await main.EditorForSmoke.CheckDragReorderForSmokeAsync(results,directory);
+            await main.EditorForSmoke.CheckButtonEditingForSmokeAsync(results);
+            await main.EditorForSmoke.CheckDialogsForSmokeAsync(results,directory);
             main.EditorForSmoke.EditShortcutForSmoke();
             await Task.Delay(300);
             await RenderAsync((FrameworkElement)main.Content, Path.Combine(directory, "editor.png"));
             var edited = main.EditorForSmoke.DraftForSmoke;
-            var rightEntry = edited.Profiles.Single(p => p.Applications.Count == 0).Entries.Single(e => e.Slot == RingSlot.Right);
+            var sharedRegistry = new ActionRegistry();
+            sharedRegistry.Register(new WindowsPlugin(), new RecordingPlatform());
+            sharedRegistry.Register(new ConfiguredShortcutsPlugin(edited.Shortcuts), new RecordingPlatform());
+            var actualRing = new RingWindow();
+            try
+            {
+                var editedProfile = edited.Profiles.Single(p => p.IsDefault);
+                actualRing.SetMenu(editedProfile, sharedRegistry);
+                actualRing.ShowAt(650, 450);
+                actualRing.Highlight(main.EditorForSmoke.SelectedButtonForSmoke);
+                await Task.Delay(150);
+                results.Add(actualRing.ViewForSmoke.Buttons.SequenceEqual(main.EditorForSmoke.PreviewForSmoke.Buttons)
+                    && actualRing.ViewForSmoke.Diameter == main.EditorForSmoke.PreviewForSmoke.Diameter
+                    ? "PASS: Editor and runtime share identical eight-button visuals and dimensions" : "FAIL: Editor and runtime visual mismatch");
+                results.Add(actualRing.ViewForSmoke.CenterTextForSmoke == main.EditorForSmoke.PreviewForSmoke.CenterTextForSmoke
+                    && actualRing.ViewForSmoke.HasCenterImageForSmoke && main.EditorForSmoke.PreviewForSmoke.HasCenterImageForSmoke
+                    ? "PASS: Runtime and editor display the same custom center text and image" : "FAIL: Custom center visual mismatch");
+                await RenderAsync(actualRing.ViewForSmoke, Path.Combine(directory, "ring-eight.png"));
+                await RenderAsync(main.EditorForSmoke.PreviewForSmoke, Path.Combine(directory, "editor-ring-eight.png"));
+            }
+            finally { actualRing.HideRing(); actualRing.Close(); }
+            var rightEntry = edited.Profiles.Single(p => p.IsDefault).Entries.Single(e => e.Id == "right");
             var shortcut = edited.Shortcuts.Single(s => s.Id == rightEntry.ActionId);
             results.Add(shortcut.Name == "保存文件" && shortcut.Keys.SequenceEqual(new ushort[] { 0x11, 0x53 })
                 ? "PASS: Visual controls edit the right slot to Ctrl + S" : "FAIL: Visual shortcut editor did not update draft");
@@ -240,7 +295,7 @@ internal static class SmokeScenario
         await Task.Delay(100);
         Check(!controller.GestureActiveForSmoke && !controller.RingVisibleForSmoke && platform.Calls == 8, "Canceled gesture cannot reopen or execute from trailing events");
         var draft = new ConfigurationDraft(DefaultProfiles.Configuration());
-        draft.SetShortcut("global", RingSlot.Right, "保存文件", new ushort[] { 0x11, 0x53 });
+        draft.SetShortcut("global", "right", "保存文件", new ushort[] { 0x11, 0x53 });
         var updated = draft.Snapshot();
         var updatedRegistry = new ActionRegistry();
         updatedRegistry.Register(new WindowsPlugin(), platform);
@@ -259,6 +314,46 @@ internal static class SmokeScenario
         Check(errors.Count == 0, "Gesture scenarios complete without controller errors");
     }
 
+    private static async Task CheckDynamicRingAsync(MainWindow main, List<string> results)
+    {
+        using var catalog = new WindowCatalog();
+        var platform = new RecordingPlatform();
+        var registry = new ActionRegistry();
+        registry.Register(new WindowsPlugin(), platform);
+        var shortcuts = Enumerable.Range(0, 8).Select(i => new ShortcutDefinition("shortcuts.test" + i, "Test " + i, new ushort[] { 17, (ushort)(49 + i) })).ToArray();
+        registry.Register(new ConfiguredShortcutsPlugin(shortcuts), platform);
+        var buttons = shortcuts.Select((shortcut, i) => new MenuEntry("button-" + i, shortcut.Id)).Reverse().ToArray();
+        var profile = new MenuProfile(3, "global", "Eight", [], buttons);
+        using var controller = new NavigationController(main.DispatcherQueue, catalog, registry, new ProfileResolver([profile]));
+        var x = main.AppWindow.Position.X + main.AppWindow.Size.Width / 2;
+        var y = main.AppWindow.Position.Y + main.AppWindow.Size.Height / 2;
+        var scale = OverlayWindow.ScaleAt(x, y);
+        for (var i = 0; i < buttons.Length; i++)
+        {
+            var angle = RingGeometry.Angle(i, buttons.Length) * Math.PI / 180;
+            var px = x + (int)(100 * scale * Math.Cos(angle));
+            var py = y + (int)(100 * scale * Math.Sin(angle));
+            controller.QueueForSmoke(new MouseSample(MousePhase.Down, x, y, 0), new MouseSample(MousePhase.Move, px, py, 0), new MouseSample(MousePhase.Up, px, py, 0));
+            await Task.Delay(80);
+        }
+        results.Add(platform.Shortcuts.Count == 8 && platform.Shortcuts.Select(k => k[1]).SequenceEqual(shortcuts.Reverse().Select(s => s.Keys[1]))
+            ? "PASS: All eight reordered runtime sectors execute their own action on middle release" : "FAIL: Dynamic sectors did not execute the expected action");
+        var layered=profile with {RingCount=2,Entries=[new("preview","windows.window.preview"),new("outer","windows.maximize",Ring:1)]};
+        controller.ApplyConfiguration(registry,new ProfileResolver([layered]));
+        controller.QueueForSmoke(new MouseSample(MousePhase.Down,x,y,0),new MouseSample(MousePhase.Move,x,y-(int)(100*scale),0),new MouseSample(MousePhase.Move,x,y-(int)(210*scale),0),new MouseSample(MousePhase.Up,x,y-(int)(210*scale),0));
+        await Task.Delay(100);
+        results.Add(platform.Calls==1&&controller.PreviewForSmoke?.IsOpen!=true?"PASS: Passing through inner preview reaches and executes outer-ring button":"FAIL: Inner preview blocked outer-ring action");
+        controller.QueueForSmoke(new MouseSample(MousePhase.Down,x,y,0),new MouseSample(MousePhase.Move,x,y-(int)(100*scale),0));
+        await Task.Delay(450);
+        results.Add(controller.PreviewForSmoke?.IsOpen==true?"PASS: Intentional hold opens preview in a multiring menu":"FAIL: Multiring preview dwell did not open");
+        controller.QueueForSmoke(new MouseSample(MousePhase.Cancel,x,y,0));await Task.Delay(80);
+        var empty = profile with { Entries = [new("blank", "")] };
+        var errors = 0; controller.Completed += r => { if (!r.Succeeded) errors++; };
+        controller.ApplyConfiguration(registry, new ProfileResolver([empty]));
+        controller.QueueForSmoke(new MouseSample(MousePhase.Down, x, y, 0), new MouseSample(MousePhase.Move, x, y - (int)(100 * scale), 0), new MouseSample(MousePhase.Up, x, y - (int)(100 * scale), 0));
+        await Task.Delay(80);
+        results.Add(platform.Shortcuts.Count == 8 && errors == 0 ? "PASS: Unconfigured runtime button cancels without action errors" : "FAIL: Blank button executed");
+    }
     private sealed class RecordingPlatform : IPlatformActions
     {
         public int Calls { get; private set; }
@@ -270,7 +365,7 @@ internal static class SmokeScenario
             return ActionResult.Success("Recorded shortcut");
         }
     }
-    private static async Task RenderAsync(FrameworkElement element, string path)
+    internal static async Task RenderAsync(FrameworkElement element, string path)
     {
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(element);

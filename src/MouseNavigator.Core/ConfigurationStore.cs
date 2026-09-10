@@ -22,7 +22,7 @@ public sealed class ConfigurationStore(string path)
     public static NavigatorConfiguration Read(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (stream.Length > ConfigurationCodec.MaximumBytes) throw new ArgumentException("配置文件不能超过 1 MB。");
+        if (stream.Length > ConfigurationCodec.MaximumBytes) throw new ArgumentException("配置文件不能超过 16 MB。");
         using var reader = new StreamReader(stream);
         return ConfigurationCodec.Deserialize(reader.ReadToEnd());
     }

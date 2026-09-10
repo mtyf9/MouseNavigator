@@ -2,19 +2,19 @@ using MouseNavigator.Contracts;
 namespace MouseNavigator.App;
 internal static class DefaultProfiles
 {
-    public static NavigatorConfiguration Configuration() => new(1, Create(), []);
+    public static NavigatorConfiguration Configuration() => new(3, Create(), []);
     public static IReadOnlyList<MenuProfile> Create() =>
     [
-        new(1, "global", "全局导航", [],
+        new(3, "global", "全局导航", [],
         [
-            new(RingSlot.Top, "windows.window.preview"), new(RingSlot.Right, "windows.maximize"),
-            new(RingSlot.Bottom, "windows.minimizeAll"), new(RingSlot.Left, "windows.tasks")
+            new("top", "windows.window.preview"), new("right", "windows.maximize"),
+            new("bottom", "windows.minimizeAll"), new("left", "windows.tasks")
         ]),
         // First-run example; saved user menus take precedence on subsequent launches.
-        new(1, "explorer", "文件资源管理器", [new("explorer.exe")],
+        new(3, "explorer", "文件资源管理器", [new("explorer.exe")],
         [
-            new(RingSlot.Top, "windows.maximize"), new(RingSlot.Right, "windows.maximize"),
-            new(RingSlot.Bottom, "windows.minimizeAll"), new(RingSlot.Left, "windows.tasks")
+            new("top", "windows.maximize"), new("right", "windows.window.preview"),
+            new("bottom", "windows.minimizeAll"), new("left", "windows.tasks")
         ], 10)
     ];
 }

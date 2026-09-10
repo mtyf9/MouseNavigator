@@ -16,7 +16,9 @@ internal sealed class NavigationController : IDisposable
     private readonly Func<WindowIdentity, ActionResult> activateWindow;
     private WindowPreviewWindow? preview;
     private bool hasInteractiveAction;
-    private long previewRefreshAt;
+    private long previewRefreshAt, previewEntryAt;
+    private string? pendingPreview;
+    private int pointerX, pointerY;
     private readonly DispatcherQueueTimer escapeTimer;
     private readonly ConcurrentQueue<MouseSample> queue = new();
     private int scheduled;
@@ -46,6 +48,8 @@ internal sealed class NavigationController : IDisposable
             {
                 // The hook consumes middle input. Only actual Up/Cancel ends a held gesture.
                 if (MiddleMouseHook.EscapePressed) { Cancel(); return; }
+                if (visible && pendingPreview is not null && Environment.TickCount64 >= previewEntryAt
+                    && ring.HitTest(pointerX,pointerY)==pendingPreview) OpenPreview(pointerX,pointerY);
                 if (preview?.IsOpen == true)
                 {
                     if (Environment.TickCount64 >= previewRefreshAt)
@@ -110,6 +114,7 @@ internal sealed class NavigationController : IDisposable
             scale = OverlayWindow.ScaleAt(sample.X, sample.Y);
             context = catalog.Capture(sample.Foreground);
             menu = resolver.Resolve(context);
+            if (!menu.Enabled) return; // Keep the held click until Up so ordinary middle clicks still replay.
             hasInteractiveAction = menu.Entries.Any(e => registry.Find(e.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview);
             ring.SetMenu(menu, registry);
             ContextChanged?.Invoke($"{context.ProcessName} · {menu.Name}");
@@ -131,6 +136,7 @@ internal sealed class NavigationController : IDisposable
         }
         if (sample.Phase == MousePhase.Move)
         {
+            if (menu?.Enabled == false) return;
             if (!visible && Math.Sqrt(Math.Pow(sample.X - originX, 2) + Math.Pow(sample.Y - originY, 2)) >= 10 * scale)
             {
                 ring.ShowAt(originX, originY); visible = true;
@@ -138,16 +144,13 @@ internal sealed class NavigationController : IDisposable
             if (visible)
             {
                 var slot = ring.HitTest(sample.X, sample.Y);
-                ring.Highlight(slot);
-                var entry = menu!.Entries.FirstOrDefault(e => e.Slot == slot);
+                ring.Highlight(slot); pointerX=sample.X;pointerY=sample.Y;
+                if(pendingPreview!=slot)pendingPreview=null;
+                var entry = menu!.Entries.FirstOrDefault(e => e.Id == slot);
                 if (entry is not null && registry.Find(entry.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview)
                 {
-                    preview ??= new WindowPreviewWindow();
-                    preview.ShowAt(sample.X, sample.Y, catalog.Enumerate());
-                    previewRefreshAt = Environment.TickCount64 + 300;
-                    ring.HideRing();
-                    visible = false;
-                }
+                    if (menu.RingCount <= 1) OpenPreview(sample.X,sample.Y);
+                    else if(pendingPreview!=entry.Id) {pendingPreview=entry.Id;previewEntryAt=Environment.TickCount64+250;}                }
             }
         }
         if (sample.Phase == MousePhase.Up)
@@ -155,14 +158,14 @@ internal sealed class NavigationController : IDisposable
             var wasVisible = visible;
             var selected = visible ? ring.HitTest(sample.X, sample.Y) : null;
             var invocation = context!;
-            var entry = menu!.Entries.FirstOrDefault(e => e.Slot == selected);
+            var entry = menu!.Entries.FirstOrDefault(e => e.Id == selected);
             Cancel();
             if (!wasVisible)
             {
                 if (WindowCatalog.Foreground == invocation.WindowHandle && !PlatformActions.ReplayMiddleClick())
                     Completed?.Invoke(ActionResult.Failure("普通中键点击未能传递。"));
             }
-            else if (entry is not null) Execute(entry.ActionId, invocation);
+            else if (entry is not null && entry.ActionId.Length != 0) Execute(entry.ActionId, invocation);
         }
     }
 #if DEBUG
@@ -185,7 +188,14 @@ internal sealed class NavigationController : IDisposable
         }
         finally { busy = false; }
     }
-    private void Cancel() { active = false; visible = false; ring.HideRing(); preview?.HidePreview(); }
+    private void OpenPreview(int x,int y)
+    {
+        pendingPreview=null;
+        preview ??= new WindowPreviewWindow();
+        preview.ShowAt(x,y,catalog.Enumerate());previewRefreshAt=Environment.TickCount64+300;
+        ring.HideRing();visible=false;
+    }
+    private void Cancel() { pendingPreview=null; active = false; visible = false; ring.HideRing(); preview?.HidePreview(); }
     public void Dispose()
     {
         if (disposed) return;

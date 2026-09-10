@@ -17,16 +17,30 @@ public static class OverlayWindow
         var monitor = MonitorFromPoint(new() { X = x, Y = y }, 2);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
         if (!GetMonitorInfoW(monitor, ref info)) throw new InvalidOperationException("无法获取显示器工作区。");
-        GetDpiForMonitor(monitor, 0, out var dpi, out _);
-        var scale = (dpi == 0 ? 96 : dpi) / 96d;
-        var pixels = (int)Math.Round(size * scale);
+        var pixels = (int)Math.Round(RingDiameterAt(x, y, size) * ScaleAt(x, y));
         var left = Math.Clamp(x - pixels / 2, info.Work.Left, Math.Max(info.Work.Left, info.Work.Right - pixels));
         var top = Math.Clamp(y - pixels / 2, info.Work.Top, Math.Max(info.Work.Top, info.Work.Bottom - pixels));
         var region = CreateEllipticRgn(0, 0, pixels + 1, pixels + 1);
         if (region != 0 && SetWindowRgn(hwnd, region, true) == 0) DeleteObject(region);
         SetWindowPos(hwnd, -1, left, top, pixels, pixels, 0x10 | 0x40);
         // WinUI updates its rasterization scale after the native move to the target monitor.
-        return new(left + pixels / 2d, top + pixels / 2d, scale);
+        return new(left + pixels / 2d, top + pixels / 2d, pixels / size);
+    }
+    // Return the same rounded DIP diameter used by the native overlay, including
+    // the monitor work-area limit. The editor scrolls instead of shrinking to fit.
+    public static double RingDiameterForWindow(nint hwnd, double size)
+    {
+        if (hwnd == 0 || !GetWindowRect(hwnd, out var rect)) return size;
+        return RingDiameterAt((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2, size);
+    }
+    public static double RingDiameterAt(int x, int y, double size)
+    {
+        var monitor = MonitorFromPoint(new() { X = x, Y = y }, 2);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfoW(monitor, ref info)) throw new InvalidOperationException("无法获取显示器工作区。");
+        var dpiScale = ScaleAt(x, y);
+        return Math.Round(Math.Min(size * dpiScale,
+            Math.Max(1, Math.Min(info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top) - 24))) / dpiScale;
     }
     public static OverlayPanelPlacement PanelPlacement(int x, int y)
     {
