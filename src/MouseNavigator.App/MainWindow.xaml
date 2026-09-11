@@ -20,8 +20,8 @@
         <NavigationViewItem Content="悬浮窗菜单" Icon="AllApps" Tag="profiles"/>
         <NavigationViewItem Content="动作库" Icon="Library" Tag="actions"/>
       </NavigationView.MenuItems>
-      <ScrollViewer x:Name="PageScroll">
-        <StackPanel Padding="24,24,24,32" Spacing="24" MaxWidth="1360" HorizontalAlignment="Stretch">
+      <ScrollViewer x:Name="PageScroll" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="PageContent" Width="{Binding ViewportWidth, ElementName=PageScroll}" Padding="24,24,24,32" Spacing="24" MaxWidth="1360" HorizontalAlignment="Center">
           <StackPanel x:Name="HomePage" Spacing="24">
             <StackPanel Spacing="8">
               <TextBlock Text="让操作跟随鼠标" FontSize="32" FontWeight="SemiBold"/>

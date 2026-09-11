@@ -17,6 +17,12 @@ internal static class SmokeScenario
         Directory.CreateDirectory(directory);
         try
         {
+            if(Environment.GetCommandLineArgs().Contains("--dpi-check"))
+            {
+                await Task.Delay(350);var focusedResults=new List<string>();
+                await main.CheckDisplaysAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
             if(Environment.GetCommandLineArgs().Contains("--tray-hint-check"))
             {
                 await Task.Delay(350);var focusedResults=new List<string>();
