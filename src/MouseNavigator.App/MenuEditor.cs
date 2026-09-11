@@ -49,8 +49,6 @@ internal sealed partial class MenuEditor : UserControl
     private readonly Button record=new(){Content="录入快捷键",HorizontalAlignment=HorizontalAlignment.Stretch};
     private readonly TextBlock chord=new(){FontSize=16,TextWrapping=TextWrapping.Wrap};
     public Func<NavigatorConfiguration,Task>? SaveRequested {get;set;}
-    public Func<Task<NavigatorConfiguration?>>? ImportRequested {get;set;}
-    public Func<NavigatorConfiguration,Task>? ExportRequested {get;set;}
     public Func<Task<string?>>? PickImageRequested {get;set;}
     public Func<Task<IReadOnlyList<string>>>? PickProgramsRequested {get;set;}
     public Func<Task<MenuDocument?>>? ImportMenuRequested {get;set;}
@@ -154,10 +152,7 @@ internal sealed partial class MenuEditor : UserControl
         }
         designer.SizeChanged+=(_,_)=>SyncLibraryHeight();properties.SizeChanged+=(_,_)=>SyncLibraryHeight();
         Grid.SetColumn(card,2);editor.Children.Add(card);root.Children.Add(editor);
-        var files=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        files.Children.Add(MakeButton("导入全部配置",async(_,_)=>await RunAsync(async()=>{var imported=ImportRequested is null?null:await ImportRequested();if(imported is not null)Load(imported,true);})));
-        files.Children.Add(MakeButton("导出全部配置",async(_,_)=>await RunAsync(async()=>{if(ExportRequested is not null)await ExportRequested(draft.Snapshot());})));
-        root.Children.Add(files);root.Children.Add(feedback);
+        root.Children.Add(feedback);
         PopulateActionChoices();foreach(var pair in ShortcutKeys.MainKeys)mainKey.Items.Add(new ComboBoxItem {Content=pair.Value,Tag=pair.Key});
         profiles.SelectionChanged+=(_,_)=>
         {

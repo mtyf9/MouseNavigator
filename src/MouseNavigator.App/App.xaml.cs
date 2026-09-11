@@ -34,10 +34,11 @@ public partial class App : Application
         if (smoke >= 0 && smoke + 1 < arguments.Length) mutexName += ".Smoke." + Environment.ProcessId;
 #endif
         instance = new Mutex(true, mutexName, out var first);
-        if (!first) { instance.Dispose(); Exit(); return; }
+        if (!first) { if(!Environment.GetCommandLineArgs().Contains("--startup"))MouseNavigator.Windows.TrayIcon.RequestShow();instance.Dispose(); Exit(); return; }
         window = new MainWindow();
         window.Closed += (_, _) => { instance.ReleaseMutex(); instance.Dispose(); };
-        window.Activate();
+        if(Environment.GetCommandLineArgs().Contains("--startup")&&window.CanHideToTray)window.AppWindow.Hide();
+        else window.Activate();
 #if DEBUG
         if (smoke >= 0 && smoke + 1 < arguments.Length)
         {

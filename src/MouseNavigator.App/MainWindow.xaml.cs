@@ -41,9 +41,7 @@ public sealed partial class MainWindow : Window
         {
             OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this),
             SaveRequested = SaveConfigurationAsync,
-            ImportRequested = ImportConfigurationAsync,
             PickImageRequested = PickIconAsync,
-            ExportRequested = ExportConfigurationAsync,
             PickProgramsRequested = PickProgramsAsync,
             ImportMenuRequested = ImportMenuAsync,
             ExportMenuRequested = ExportMenuAsync
@@ -75,34 +73,17 @@ public sealed partial class MainWindow : Window
             StatusBar.Message = ex.Message;
             StatusBar.Severity = InfoBarSeverity.Error;
         }
-        AppWindow.Closing += async (_, args) =>
+        AppWindow.Closing += (sender, args) =>
         {
-            if (!editor.IsEnabled || editor.HasOpenDialog) { args.Cancel = true; return; }
-            if (closeApproved || !editor.IsDirty) return;
-            args.Cancel = true;
-            if (closeDialogOpen) return;
-            closeDialogOpen = true;
-            try
-            {
-                var dialog = new ContentDialog
-                {
-                    XamlRoot = Content.XamlRoot, Title = "保存菜单修改？",
-                    Content = "当前菜单有未保存的修改。",
-                    PrimaryButtonText = "保存并退出", SecondaryButtonText = "放弃并退出",
-                    CloseButtonText = "继续编辑", DefaultButton = ContentDialogButton.Primary,
-                    RequestedTheme = ElementTheme.Dark
-                };
-                var result = await dialog.ShowAsync();
-                if (result == ContentDialogResult.None) return;
-                if (result == ContentDialogResult.Primary) await editor.SaveDraftAsync();
-                closeApproved = true;
-                Close();
-            }
-            catch (Exception ex) { editor.Notify(ex.Message, InfoBarSeverity.Error); }
-            finally { closeDialogOpen = false; }
+            if(closeApproved)return;
+            args.Cancel=true;
+            if(homeOperation||closeDialogOpen||!editor.IsEnabled||editor.HasOpenDialog)return;
+            if(CanHideToTray)_=HideToTrayAsync();
+            else _=RequestExitAsync();
         };
-        Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)editor.StopRecording();};
-        Closed += (_, _) => { editor.StopRecording();controller?.Dispose(); catalog.Dispose(); };
+        Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)editor.StopRecording();else RefreshStartupState();};
+        Closed += (_, _) => { tray?.Dispose();editor.StopRecording();controller?.Dispose(); catalog.Dispose(); };
+        InitializeDesktopIntegration();
     }
 
     private static ConfigurationStore CreateStore()
@@ -145,13 +126,13 @@ public sealed partial class MainWindow : Window
     private async Task ExportConfigurationAsync(NavigatorConfiguration configuration)
     {
         var json = ConfigurationCodec.Serialize(configuration);
-        var picker = new FileSavePicker { SuggestedFileName = "MouseNavigator-menus" };
-        picker.FileTypeChoices.Add("菜单配置", new List<string> { ".json" });
+        var picker = new FileSavePicker { SuggestedFileName = "MouseNavigator-backup-"+DateTime.Now.ToString("yyyyMMdd-HHmm") };
+        picker.FileTypeChoices.Add("配置备份", new List<string> { ".json" });
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
         var file = await picker.PickSaveFileAsync();
         if (file is null) return;
         await FileIO.WriteTextAsync(file, json);
-        editor.Notify("菜单配置已导出，可在其他电脑导入。", InfoBarSeverity.Success);
+        ShowHomeStatus("备份完成","全部菜单和预设已保存到备份文件。",InfoBarSeverity.Success);
     }
     private async Task<IReadOnlyList<string>> PickProgramsAsync()
     {
@@ -211,6 +192,7 @@ public sealed partial class MainWindow : Window
     private void EnabledSwitch_Toggled(object sender, RoutedEventArgs e)
     {
         if (controller is not null) controller.Enabled = EnabledSwitch.IsOn;
+        tray?.Update(EnabledSwitch.IsOn,EnabledSwitch.IsEnabled&&controller is not null);
     }
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {

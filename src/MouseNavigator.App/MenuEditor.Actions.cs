@@ -68,6 +68,11 @@ internal sealed partial class MenuEditor
         recording=false;recordingSession++;recordingTimeout.Stop();
         shortcutRecorder?.Dispose();shortcutRecorder=null;record.Content="录入快捷键";
     }
+    internal NavigatorConfiguration ConfigurationForBackup => draft.Snapshot();
+    internal void AcceptRestoredConfiguration(NavigatorConfiguration configuration)
+    {
+        saved=configuration;Load(configuration,false);
+    }
     private void Load(NavigatorConfiguration configuration, bool dirty)
     {
         CancelDrag(); draft = new(configuration);

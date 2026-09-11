@@ -49,6 +49,26 @@
                 </StackPanel>
               </Border>
             </Grid>
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="24">
+              <Grid ColumnSpacing="24"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Spacing="8">
+                  <TextBlock Text="开机启动" FontSize="20" FontWeight="SemiBold"/>
+                  <TextBlock x:Name="StartupHint" Text="登录 Windows 后自动运行，启动后驻留托盘。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <ToggleSwitch x:Name="StartupSwitch" Grid.Column="1" OnContent="已开启" OffContent="已关闭" Toggled="StartupSwitch_Toggled"/>
+              </Grid>
+            </Border>
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="16" Padding="24">
+              <StackPanel Spacing="12">
+                <TextBlock Text="配置备份" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock Text="备份全部菜单、快捷键、图片和预设，包含尚未保存的菜单编辑。还原会替换现有配置。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <Button x:Name="BackupButton" Content="备份配置" Click="BackupButton_Click"/>
+                  <Button x:Name="RestoreButton" Content="还原配置" Click="RestoreButton_Click"/>
+                </StackPanel>
+                <TextBlock Text="关闭主窗口后继续在托盘运行；点击托盘图标可重新打开，右键可暂停或退出。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+              </StackPanel>
+            </Border>
             <InfoBar x:Name="StatusBar" IsOpen="True" IsClosable="False" Severity="Informational" Title="准备就绪" Message="切换到任意应用，按住中键并移动试试。"/>
             <StackPanel Spacing="8"><TextBlock Text="最近一次导航" FontWeight="SemiBold"/><TextBlock x:Name="ContextText" Text="尚未触发" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
           </StackPanel>

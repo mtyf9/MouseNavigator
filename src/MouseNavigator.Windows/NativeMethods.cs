@@ -15,6 +15,7 @@ internal static class NativeMethods
     [StructLayout(LayoutKind.Sequential)] internal struct MouseInput { public int X, Y; public uint Data, Flags, Time; public nuint ExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public nuint ExtraInfo; }
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindowsProc callback, nint parameter);
+    [DllImport("user32.dll")] internal static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsIconic(nint hwnd);
