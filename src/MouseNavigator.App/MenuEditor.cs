@@ -13,28 +13,29 @@ internal sealed partial class MenuEditor : UserControl
     private string? selectedButtonId;
     private bool loading,recording,dialogOpen;
     private readonly ComboBox profiles=new(){MinWidth=210};
-    private readonly TextBox processes=new(){Header="应用进程名（多个用分号分隔）",PlaceholderText="例如 Code.exe; devenv.exe"};
-    private readonly NumberBox priority=new(){Header="匹配优先级",Minimum=int.MinValue,Maximum=int.MaxValue,Width=120};
+    private readonly TextBox processes=new(){PlaceholderText="应用进程，例如 Code.exe; devenv.exe"};
+    private readonly NumberBox priority=new(){PlaceholderText="优先级",Minimum=int.MinValue,Maximum=int.MaxValue,Width=120};
     private readonly CheckBox globalDefault=new(){Content="设为全局默认菜单"};
     private readonly ToggleSwitch menuEnabled=new(){OnContent="菜单已启用",OffContent="菜单已禁用"};
     private readonly Button chooseProgram=new(){Content="选择应用程序…"};
     private readonly TextBlock matchWarning=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Opacity=0.75};
-    private readonly ComboBox actionChoice=new(){Header="动作",HorizontalAlignment=HorizontalAlignment.Stretch};
+    private readonly StackPanel actionChoices=new(){Spacing=6};
     private readonly TextBox buttonName=new(){Header="名称",MaxLength=80,PlaceholderText="留空使用动作名称"};
     private readonly Button iconPicker=new(){HorizontalAlignment=HorizontalAlignment.Stretch};
     private readonly Button savePreset=new(){Width=48,Height=48,HorizontalAlignment=HorizontalAlignment.Center};
     private readonly StackPanel properties=new(){Spacing=12};
+    private readonly TextBox presetSearch=new(){PlaceholderText="搜索预设按钮",Margin=new Thickness(0,6,0,8)};
     private readonly StackPanel presetCards=new(){Spacing=8};
     private readonly RadialMenuView preview=new(){IsEditor=true};
     private readonly ComboBox rings=new(){MinWidth=120,PlaceholderText="选择圈"};
     private readonly Viewbox previewBox=new(){HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
     private readonly ScrollViewer previewScroll=new(){HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollMode=ScrollMode.Enabled,VerticalScrollMode=ScrollMode.Enabled,ZoomMode=ZoomMode.Disabled};
+    private readonly Slider buttonGap=new(){Header="按钮间隙（度）",Minimum=0,Maximum=20,StepFrequency=1};
     private readonly Slider menuSize=new(){Minimum=50,Maximum=200,Value=100,StepFrequency=1,Header="悬浮窗大小",HorizontalAlignment=HorizontalAlignment.Stretch};
     private readonly TextBlock sizeDescription=new(){FontSize=12,Opacity=0.7,TextWrapping=TextWrapping.Wrap};
     private bool addingRing;
     private readonly TextBlock dragHint=new(){Text="拖动插入位置 · 拖到垃圾桶删除 · Esc 取消",FontSize=12,Opacity=0.7,TextWrapping=TextWrapping.Wrap};
     private readonly Button delete=new(){Content="删除菜单"},save=new(){Content="保存并应用"};
-    private readonly TextBlock dirtyText=new(){Opacity=0.7,VerticalAlignment=VerticalAlignment.Center};
     private readonly InfoBar feedback=new(){IsClosable=true};
     private readonly StackPanel root=new(){Spacing=14};
     private readonly Canvas dragLayer=new(){IsHitTestVisible=false};
@@ -53,38 +54,45 @@ internal sealed partial class MenuEditor : UserControl
     public Func<Task<IReadOnlyList<string>>>? PickProgramsRequested {get;set;}
     public Func<Task<MenuDocument?>>? ImportMenuRequested {get;set;}
     public Func<MenuDocument,Task>? ExportMenuRequested {get;set;}
+    public Action? OpenSettingsRequested {get;set;}
     public bool IsDirty {get;private set;}
     internal bool HasOpenDialog=>dialogOpen;
     public MenuEditor(NavigatorConfiguration configuration,IReadOnlyList<ActionDescriptor> availableActions)
     {
+        InitializePanelTheme();
+        feedback.Closing+=(_,args)=>{args.Cancel=true;ClearNotification();};
+        ToolTipService.SetToolTip(previewAppearanceButton,"窗口预览外观");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(previewAppearanceButton,"窗口预览外观");
+        previewAppearanceButton.Click+=async(_,_)=>await RunAsync(ChoosePreviewAppearanceAsync);
+
+        IsDirty=!configuration.BuiltInMenusInitialized;configuration=DefaultProfiles.InitializeMenus(configuration);
         saved=configuration;draft=new(configuration);actions=availableActions;
+        presetBack.Click+=(_,_)=>NavigatePresetFolder(currentPresetFolder?.StartsWith("$")==true?null:draft.PresetFolders.FirstOrDefault(f=>f.Id==currentPresetFolder)?.ParentId);
         profileId=draft.Profiles.Single(p=>p.IsDefault).Id;
         var surface=new Grid();surface.Children.Add(root);surface.Children.Add(dragLayer);Content=surface;
         root.Children.Add(new TextBlock {Text="悬浮窗菜单",FontSize=30,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
         var menuTools=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        menuTools.Children.Add(profiles);
-        menuTools.Children.Add(MakeButton("重命名",async(_,_)=>await RunAsync(()=>RenameAsync(false))));
-        delete.Click+=async(_,_)=>{if(await ConfirmAsync("删除菜单","删除当前悬浮菜单？")){draft.Delete(profileId);profileId=draft.Profiles.Single(p=>p.IsDefault).Id;MarkDirty();RefreshProfiles();}};
-        menuTools.Children.Add(delete);
-        menuTools.Children.Add(MakeButton("导入菜单",async(_,_)=>await RunAsync(ImportSingleMenuAsync)));
-        menuTools.Children.Add(MakeButton("导出菜单",async(_,_)=>await RunAsync(async()=>{if(ExportMenuRequested is not null)await ExportMenuRequested(draft.ExportMenu(profileId));})));
-        menuTools.Children.Add(menuEnabled);root.Children.Add(menuTools);
+        menuTools.Children.Add(profiles);menuTools.Children.Add(menuEnabled);root.Children.Add(menuTools);
         var saveTools=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
         save.Style=(Style)Application.Current.Resources["AccentButtonStyle"];
         save.Click+=async(_,_)=>await RunAsync(SaveDraftAsync);
         saveTools.Children.Add(save);
         saveTools.Children.Add(MakeButton("放弃修改",(_,_)=>Load(saved,false)));
-        saveTools.Children.Add(MakeButton("恢复默认",(_,_)=>Load(DefaultProfiles.Configuration() with {Presets=draft.Presets.ToArray()},true)));
-        saveTools.Children.Add(dirtyText);root.Children.Add(saveTools);
+
+
+        saveTools.Children.Add(MakeButton("导入菜单",async(_,_)=>await RunAsync(ImportSingleMenuAsync)));
+        saveTools.Children.Add(MakeButton("导出菜单",async(_,_)=>await RunAsync(async()=>{if(ExportMenuRequested is not null)await ExportMenuRequested(draft.ExportMenu(profileId));})));
+        menuTools.Children.Add(saveTools);
+        menuTools.Children.Add(MakeButton("设置",(_,_)=>OpenSettingsRequested?.Invoke()));
         var matching=new StackPanel{Spacing=6};
         var matchHeading=new StackPanel{Orientation=Orientation.Horizontal,Spacing=20};
         matchHeading.Children.Add(new TextBlock{Text="应用匹配",FontSize=17,VerticalAlignment=VerticalAlignment.Center});matchHeading.Children.Add(globalDefault);
-        matching.Children.Add(matchHeading);
+
         var matches=new StackPanel{Orientation=Orientation.Horizontal,Spacing=10};processes.Width=330;
-        matches.Children.Add(processes);chooseProgram.VerticalAlignment=VerticalAlignment.Bottom;matches.Children.Add(chooseProgram);matches.Children.Add(priority);
+        matches.Children.Add(matchHeading);matches.Children.Add(processes);chooseProgram.VerticalAlignment=VerticalAlignment.Bottom;matches.Children.Add(chooseProgram);matches.Children.Add(new TextBlock{Text="优先级",VerticalAlignment=VerticalAlignment.Center});matches.Children.Add(priority);
         matching.Children.Add(matches);matching.Children.Add(matchWarning);root.Children.Add(matching);
         var editor=new Grid {ColumnSpacing=12};
-        editor.ColumnDefinitions.Add(new(){Width=new GridLength(154)});
+        editor.ColumnDefinitions.Add(new(){Width=new GridLength(236)});
         editor.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         editor.ColumnDefinitions.Add(new(){Width=new GridLength(236)});
         var library=new Grid{RowSpacing=10};
@@ -93,10 +101,13 @@ internal sealed partial class MenuEditor : UserControl
         library.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
         library.Children.Add(new TextBlock {Text="预设按钮",FontSize=18,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
         var libraryHint=new TextBlock {Text="拖入菜单后独立配置",FontSize=12,Opacity=0.65,TextWrapping=TextWrapping.Wrap};
-        Grid.SetRow(libraryHint,1);library.Children.Add(libraryHint);
-        var presetScroll=new ScrollViewer {Content=presetCards,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
+        var searchArea=new StackPanel();searchArea.Children.Add(libraryHint);searchArea.Children.Add(presetSearch);searchArea.Children.Add(presetBreadcrumb);
+        var folderTools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6};
+        folderTools.Children.Add(presetBack);folderTools.Children.Add(MakeButton("新建文件夹",async(_,_)=>await CreatePresetFolderAsync()));searchArea.Children.Add(folderTools);
+        Grid.SetRow(searchArea,1);library.Children.Add(searchArea);presetSearch.TextChanged+=(_,_)=>{if(!presetNavigationPending)RefreshPresets();};
+        presetScroll.Content=presetCards;
         Grid.SetRow(presetScroll,2);library.Children.Add(presetScroll);
-        var libraryCard=new Border{Background=Brush(35,40,51),CornerRadius=new CornerRadius(14),Padding=new Thickness(10,14,10,14),Child=library,Height=400,VerticalAlignment=VerticalAlignment.Top};
+        var libraryCard=new Border{Background=panelThemeBrush,CornerRadius=new CornerRadius(14),Padding=new Thickness(14),Child=library,Height=400,VerticalAlignment=VerticalAlignment.Top};
         editor.Children.Add(libraryCard);
         var designer=new StackPanel {Spacing=10,VerticalAlignment=VerticalAlignment.Top};
         var circleTools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Bottom,Margin=new Thickness(0,0,0,28)};
@@ -116,9 +127,17 @@ internal sealed partial class MenuEditor : UserControl
         Grid.SetRow(previewScroll,1);previewArea.Children.Add(previewScroll);
         previewArea.Children.Add(RotationArea(-1));
         previewArea.Children.Add(RotationArea(1));
-        var sizeTools=new StackPanel{MaxWidth=280,Margin=new Thickness(104,0,104,0),Spacing=2,VerticalAlignment=VerticalAlignment.Top};
-        sizeDescription.FontSize=11;
-        sizeTools.Children.Add(menuSize);sizeTools.Children.Add(sizeDescription);previewArea.Children.Add(sizeTools);
+        var appearanceTools=new Grid{MaxWidth=720,Margin=new Thickness(90,0,90,0),ColumnSpacing=12,VerticalAlignment=VerticalAlignment.Top,HorizontalAlignment=HorizontalAlignment.Stretch};
+        appearanceTools.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+        appearanceTools.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        appearanceTools.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+        var sizeTools=new StackPanel{Spacing=2};sizeDescription.FontSize=11;
+        sizeTools.Children.Add(menuSize);sizeTools.Children.Add(sizeDescription);appearanceTools.Children.Add(sizeTools);
+        Grid.SetColumn(buttonGap,2);appearanceTools.Children.Add(buttonGap);
+        var colors=new StackPanel{Spacing=6};
+        colors.Children.Add(MakeButton("悬浮窗颜色",async(_,_)=>await ChooseMenuColorAsync()));
+
+        Grid.SetColumn(colors,1);appearanceTools.Children.Add(colors);previewArea.Children.Add(appearanceTools);
         Grid.SetRow(circleTools,2);previewArea.Children.Add(circleTools);
         var saveArea=new StackPanel{Width=96,Spacing=4,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Bottom,Margin=new Thickness(4)};
         savePreset.Content=ButtonIcons.Create("\uE74E",null,20);saveArea.Children.Add(savePreset);
@@ -136,14 +155,16 @@ internal sealed partial class MenuEditor : UserControl
         centerSettings.Children.Add(MakeButton("恢复默认中心",(_,_)=>{draft.SetCenterAppearance(profileId,null,null);MarkDirty();RefreshCenterSettings();RefreshPreview();}));
         Grid.SetColumn(designer,1);editor.Children.Add(designer);
         properties.Children.Add(new TextBlock {Text="配置按钮",FontSize=20,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
-        properties.Children.Add(buttonName);properties.Children.Add(iconPicker);properties.Children.Add(actionChoice);
+        properties.Children.Add(buttonName);properties.Children.Add(iconPicker);properties.Children.Add(actionChoices);
         shortcutPanel.Children.Add(shortcutName);shortcutPanel.Children.Add(record);
         var mods=new Grid();mods.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});mods.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         mods.RowDefinitions.Add(new());mods.RowDefinitions.Add(new());
         var checks=new[]{ctrl,alt,shift,win};for(var i=0;i<checks.Length;i++){Grid.SetColumn(checks[i],i%2);Grid.SetRow(checks[i],i/2);mods.Children.Add(checks[i]);}
-        shortcutPanel.Children.Add(mods);shortcutPanel.Children.Add(mainKey);shortcutPanel.Children.Add(chord);
-        properties.Children.Add(shortcutPanel);properties.Children.Add(centerSettings);
-        var card=new Border {Background=Brush(35,40,51),CornerRadius=new CornerRadius(14),Padding=new Thickness(14),Child=properties};
+        var manual=new Expander{Header="手动选择（可选）",HorizontalAlignment=HorizontalAlignment.Stretch};
+        var manualBody=new StackPanel{Spacing=8};manualBody.Children.Add(mods);manualBody.Children.Add(mainKey);manual.Content=manualBody;
+        shortcutPanel.Children.Add(chord);shortcutPanel.Children.Add(manual);
+        properties.Children.Add(centerSettings);
+        var card=new Border {Background=panelThemeBrush,CornerRadius=new CornerRadius(14),Padding=new Thickness(14),Child=properties};
         properties.VerticalAlignment=VerticalAlignment.Top;
         void SyncLibraryHeight()
         {
@@ -153,14 +174,18 @@ internal sealed partial class MenuEditor : UserControl
         designer.SizeChanged+=(_,_)=>SyncLibraryHeight();properties.SizeChanged+=(_,_)=>SyncLibraryHeight();
         Grid.SetColumn(card,2);editor.Children.Add(card);root.Children.Add(editor);
         root.Children.Add(feedback);
-        PopulateActionChoices();foreach(var pair in ShortcutKeys.MainKeys)mainKey.Items.Add(new ComboBoxItem {Content=pair.Value,Tag=pair.Key});
+        BuildLaunchControls();PopulateActionChoices();foreach(var pair in ShortcutKeys.MainKeys)mainKey.Items.Add(new ComboBoxItem {Content=pair.Value,Tag=pair.Key});
+        profiles.DropDownOpened+=(_,_)=>SetProfileRowTools(true);
+        profiles.DropDownClosed+=(_,_)=>DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,()=>{if(!profiles.IsDropDownOpen)SetProfileRowTools(false);});
         profiles.SelectionChanged+=(_,_)=>
         {
             if(loading||profiles.SelectedItem is not ComboBoxItem item)return;
             if((string)item.Tag=="$new") {QueueNewMenu();return;}
-            CancelDrag();profileId=(string)item.Tag;selectedButtonId=null;RefreshProfile();
+
+            QueueProfileSelection((string)item.Tag);
         };
         rings.SelectionChanged+=(_,_)=>{if(!loading&&!addingRing&&rings.SelectedItem is ComboBoxItem item&&(int)item.Tag<0)QueueAddRing((int)item.Tag==-2);};
+        buttonGap.ValueChanged+=(_,_)=>{if(loading)return;var p=draft.Find(profileId);if(Math.Abs(p.ButtonGap-buttonGap.Value)<.001)return;draft.SetAppearanceOptions(profileId,p.AccentColor,p.NormalColor,p.ActiveOpacity,p.NormalOpacity,buttonGap.Value);MarkDirty();RefreshPreview();};
         menuSize.ValueChanged+=(_,_)=>{
             if(loading||Math.Abs(draft.Find(profileId).SizeScale-menuSize.Value/100)<0.00001)return;
             CancelDrag();draft.SetSize(profileId,menuSize.Value/100);MarkDirty();RefreshPreview();
@@ -176,13 +201,13 @@ internal sealed partial class MenuEditor : UserControl
         centerName.TextChanged+=(_,_)=>{if(loading||centerName.Text==(draft.Find(profileId).CenterText??"松开执行"))return;draft.SetCenterAppearance(profileId,centerName.Text,draft.Find(profileId).CenterImage,draft.Find(profileId).CenterGlyph);MarkDirty();RefreshPreview();};
         centerImagePicker.Click+=async(_,_)=>await ShowIconsAsync();
         clearCenterImage.Click+=(_,_)=>{draft.SetCenterAppearance(profileId,draft.Find(profileId).CenterText,null);MarkDirty();RefreshCenterSettings();RefreshPreview();};
-        actionChoice.SelectionChanged+=(_,_)=>ChooseAction();shortcutName.TextChanged+=(_,_)=>UpdateShortcut();
+        shortcutName.TextChanged+=(_,_)=>UpdateShortcut();
         foreach(var check in checks){check.Checked+=(_,_)=>UpdateShortcut();check.Unchecked+=(_,_)=>UpdateShortcut();}
         mainKey.SelectionChanged+=(_,_)=>UpdateShortcut();
         record.Click+=(_,_)=>StartRecording();recordingTimeout.Tick+=(_,_)=>StopRecording();
         record.LostFocus+=(_,_)=>StopRecording();
         trash.Click+=async(_,_)=>await RemoveButtonAsync();
-        savePreset.Click+=(_,_)=>SaveSelectedPreset();
+        savePreset.Click+=async(_,_)=>await SaveSelectedPresetAsync();
         preview.ButtonSelected+=id=>{selectedButtonId=id;RefreshButton();};
         preview.CenterSelected+=()=>{CancelDrag();selectedButtonId=RadialMenuView.CenterButtonId;RefreshButton();};
         preview.ButtonPressed+=(id,e)=>BeginDrag(id,null,e);
@@ -192,17 +217,6 @@ internal sealed partial class MenuEditor : UserControl
         RefreshPresets();RefreshProfiles();UpdateDirty();
     }
     private MenuEntry? Entry=>draft.Find(profileId).Entries.FirstOrDefault(e=>e.Id==selectedButtonId);
-    private void PopulateActionChoices()
-    {
-        var prior=loading;loading=true;
-        try{
-            actionChoice.IsDropDownOpen=false;actionChoice.Items.Clear();actionChoice.Items.Add(new ComboBoxItem {Content="不执行动作",Tag=""});
-            foreach(var a in actions)actionChoice.Items.Add(new ComboBoxItem {Content=a.Name,Tag=a.Id});
-            actionChoice.Items.Add(new ComboBoxItem {Content="自定义快捷键…",Tag="$shortcut"});
-            foreach(var id in draft.Profiles.SelectMany(p=>p.Entries).Select(e=>e.ActionId).Distinct().Where(id=>id.Length>0&&draft.Shortcut(id)is null&&actions.All(a=>a.Id!=id)))
-                actionChoice.Items.Add(new ComboBoxItem {Content="动作不可用："+id,Tag=id});
-        }finally{loading=prior;}
-    }
     private bool newMenuPending;
     private void QueueNewMenu()
     {
@@ -211,6 +225,7 @@ internal sealed partial class MenuEditor : UserControl
         {
             try
             {
+                if(!await ConfirmPendingChangesAsync("新建菜单"))return;
                 loading=true;profiles.SelectedItem=profiles.Items.Cast<ComboBoxItem>().FirstOrDefault(i=>(string)i.Tag==profileId);loading=false;
                 await RunAsync(()=>RenameAsync(true));
             }
@@ -223,9 +238,27 @@ internal sealed partial class MenuEditor : UserControl
         loading=true;
         try
         {
-            profiles.IsDropDownOpen=false;profiles.Items.Clear();
-            foreach(var p in draft.Profiles){var item=new ComboBoxItem{Content=p.Name,Tag=p.Id};profiles.Items.Add(item);if(p.Id==profileId)profiles.SelectedItem=item;}
-            profiles.Items.Add(new ComboBoxItem{Content="＋新建悬浮菜单",Tag="$new"});
+            profiles.IsDropDownOpen=false;
+            var ids=draft.Profiles.Select(p=>p.Id).ToHashSet();
+            foreach(var item in profiles.Items.Cast<ComboBoxItem>().Where(i=>(string)i.Tag!="$new"&&!ids.Contains((string)i.Tag)).ToArray())
+            {
+                if(item.Content is ProfileChoice removed)profileRowTools.Remove(removed);
+                profiles.Items.Remove(item);
+            }
+            foreach(var p in draft.Profiles)
+            {
+                var item=profiles.Items.Cast<ComboBoxItem>().FirstOrDefault(i=>(string)i.Tag==p.Id);
+                if(item is null)
+                {
+                    item=new ComboBoxItem{Content=ProfileRow(p),ContentTemplate=profileRowTemplate,Tag=p.Id};
+                    var create=profiles.Items.Cast<ComboBoxItem>().FirstOrDefault(i=>(string)i.Tag=="$new");
+                    profiles.Items.Insert(create is null?profiles.Items.Count:profiles.Items.IndexOf(create),item);
+                }
+                else if(item.Content is ProfileChoice row){row.SetName(p.Name);row.SetDelete(new RowCommand(()=>QueueProfileOperation(p.Id,true),!p.IsDefault));}
+                if(p.Id==profileId)profiles.SelectedItem=item;
+            }
+            if(!profiles.Items.Cast<ComboBoxItem>().Any(i=>(string)i.Tag=="$new"))
+                profiles.Items.Add(new ComboBoxItem{Content="＋新建悬浮菜单",Tag="$new"});
         }
         finally{loading=false;}
         RefreshProfile();
@@ -238,7 +271,7 @@ internal sealed partial class MenuEditor : UserControl
             processes.Text=string.Join("; ",p.Applications.Select(a=>a.ProcessName));
             processes.IsEnabled=chooseProgram.IsEnabled=priority.IsEnabled=!p.IsDefault;
             globalDefault.IsChecked=p.IsDefault;globalDefault.IsEnabled=!p.IsDefault;
-            menuEnabled.IsOn=p.Enabled;priority.Value=p.Priority;delete.IsEnabled=!p.IsDefault;menuSize.Value=p.SizeScale*100;
+            menuEnabled.IsOn=p.Enabled;priority.Value=p.Priority;delete.IsEnabled=!p.IsDefault;menuSize.Value=p.SizeScale*100;buttonGap.Value=p.ButtonGap;
         }
         finally{loading=false;}
         RefreshCenterSettings();RefreshRings(0);RefreshButton();RefreshMatchWarning();
@@ -263,15 +296,17 @@ internal sealed partial class MenuEditor : UserControl
         try{
             var centerSelected=selectedButtonId==RadialMenuView.CenterButtonId;
             centerSettings.Visibility=centerSelected?Visibility.Visible:Visibility.Collapsed;
-            foreach(var control in new UIElement[]{buttonName,iconPicker,actionChoice})
+            foreach(var control in new UIElement[]{buttonName,iconPicker,actionChoices})
                 control.Visibility=centerSelected?Visibility.Collapsed:Visibility.Visible;
-            if(centerSelected){trash.IsEnabled=savePreset.IsEnabled=false;StopRecording();shortcutPanel.Visibility=Visibility.Collapsed;RefreshCenterSettings();RefreshPreview();return;}
+            if(centerSelected){trash.IsEnabled=savePreset.IsEnabled=false;StopRecording();shortcutPanel.Visibility=launchPanel.Visibility=Visibility.Collapsed;RefreshCenterSettings();RefreshPreview();return;}
             var e=Entry;if(e is null){selectedButtonId=draft.Find(profileId).Entries.FirstOrDefault()?.Id;e=Entry;}
-            buttonName.IsEnabled=iconPicker.IsEnabled=actionChoice.IsEnabled=trash.IsEnabled=savePreset.IsEnabled=e is not null;
+            buttonName.IsEnabled=iconPicker.IsEnabled=trash.IsEnabled=savePreset.IsEnabled=e is not null;
+            foreach(var choice in actionChoices.Children.OfType<Button>())
+                choice.IsEnabled=e is not null;
             buttonName.Text=e?.Label??"";
             var icon=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};icon.Children.Add(ButtonIcons.Create(e?.Glyph??actions.FirstOrDefault(a=>a.Id==e?.ActionId)?.Glyph,e?.Image));icon.Children.Add(new TextBlock{Text="选择图标 / 图片",VerticalAlignment=VerticalAlignment.Center});iconPicker.Content=icon;
-            var id=draft.Shortcut(e?.ActionId)is not null?"$shortcut":e?.ActionId??"";
-            actionChoice.SelectedItem=actionChoice.Items.Cast<ComboBoxItem>().FirstOrDefault(i=>(string)i.Tag==id);
+
+            RefreshActionSummary();RefreshLaunchFields();
             if(e is not null)rings.SelectedItem=rings.Items.Cast<ComboBoxItem>().First(i=>(int)i.Tag==e.Ring);
             RefreshShortcutFields();
         }finally{loading=false;}

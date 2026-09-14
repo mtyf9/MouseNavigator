@@ -11,16 +11,6 @@ using Windows.UI.Core;
 namespace MouseNavigator.App;
 internal sealed partial class MenuEditor
 {
-    private void ChooseAction()
-    {
-        if (loading || selectedButtonId is null || actionChoice.SelectedItem is not ComboBoxItem item) return;
-        var id = (string)item.Tag;
-        if(Entry is null || (id=="$shortcut"?draft.Shortcut(Entry.ActionId)is not null:Entry.ActionId==id))return;
-        if (id == "$shortcut") draft.SetShortcut(profileId, selectedButtonId, "自定义快捷键", new ushort[] { 0x11, 0x4B });
-        else draft.SetAction(profileId, selectedButtonId, id.Length == 0 ? null : id);
-        // Keep the selected ComboBoxItem alive until WinUI finishes processing the selection.
-        MarkDirty(); RefreshShortcutFields();
-    }
     private void UpdateShortcut()
     {
         if (loading || selectedButtonId is null || shortcutPanel.Visibility != Visibility.Visible || mainKey.SelectedItem is not ComboBoxItem item) return;
@@ -30,6 +20,7 @@ internal sealed partial class MenuEditor
         keys.Add((ushort)item.Tag);
         var current=draft.Shortcut(Entry?.ActionId);
         if(Entry is null||(current is not null&&current.Name==shortcutName.Text&&current.Keys.SequenceEqual(keys)))return;
+        if(string.IsNullOrWhiteSpace(shortcutName.Text))return;
         draft.SetShortcut(profileId, selectedButtonId, shortcutName.Text, keys);
         chord.Text = ShortcutKeys.Format(keys);
         MarkDirty(); RefreshPreview();
@@ -65,6 +56,7 @@ internal sealed partial class MenuEditor
     }
     internal void StopRecording()
     {
+        macroStopAction?.Invoke();
         recording=false;recordingSession++;recordingTimeout.Stop();
         shortcutRecorder?.Dispose();shortcutRecorder=null;record.Content="录入快捷键";
     }
@@ -75,10 +67,10 @@ internal sealed partial class MenuEditor
     }
     private void Load(NavigatorConfiguration configuration, bool dirty)
     {
-        CancelDrag(); draft = new(configuration);
+        CancelDrag();dirty|=!configuration.BuiltInMenusInitialized;configuration=DefaultProfiles.InitializeMenus(configuration);draft = new(configuration);
         profileId = draft.Profiles.Single(p => p.IsDefault).Id; selectedButtonId=null;
         PopulateActionChoices();
-        IsDirty = dirty; RefreshPresets(); RefreshProfiles(); UpdateDirty(); feedback.IsOpen = false;
+        IsDirty = dirty; RefreshPresets(); RefreshProfiles(); ClearNotification();UpdateDirty();
     }
     public async Task SaveDraftAsync()
     {
@@ -95,12 +87,32 @@ internal sealed partial class MenuEditor
         }
         finally { IsEnabled = wasEnabled; }
     }
-    private void MarkDirty() { IsDirty = true; UpdateDirty(); }
-    private void UpdateDirty() { save.IsEnabled = IsDirty; dirtyText.Text = IsDirty ? "有未保存修改" : "已与当前配置同步"; }
-    public void Notify(string message, InfoBarSeverity severity = InfoBarSeverity.Informational)
+    private void MarkDirty()
     {
-        feedback.Message = message; feedback.Severity = severity; feedback.IsOpen = true;
-        DispatcherQueue.TryEnqueue(() => { if (feedback.IsLoaded) feedback.StartBringIntoView(); });
+        IsDirty=true;
+        if(notificationSeverity is InfoBarSeverity.Success or InfoBarSeverity.Informational)notificationMessage=null;
+        UpdateDirty();
+    }
+    private void UpdateDirty(){save.IsEnabled=IsDirty;RenderNotification();}
+    private string? notificationMessage;
+    private InfoBarSeverity notificationSeverity=InfoBarSeverity.Informational;
+    internal InfoBar NotificationBar=>feedback;
+    private void RenderNotification()
+    {
+        feedback.Title=IsDirty?"有未保存修改":"已与当前配置同步";
+        feedback.Message=notificationMessage??(IsDirty?"保存并应用后生效。":"");
+        feedback.Severity=notificationMessage is null?InfoBarSeverity.Informational:notificationSeverity;
+        feedback.IsClosable=notificationMessage is not null;
+        feedback.IsOpen=true;
+    }
+    private void ClearNotification()
+    {
+        notificationMessage=null;notificationSeverity=InfoBarSeverity.Informational;RenderNotification();
+    }
+    public void Notify(string message,InfoBarSeverity severity=InfoBarSeverity.Informational,string? title=null)
+    {
+        notificationMessage=string.IsNullOrWhiteSpace(title)?message:title+"："+message;
+        notificationSeverity=severity;RenderNotification();
     }
     private async Task RunAsync(Func<Task> action)
     {

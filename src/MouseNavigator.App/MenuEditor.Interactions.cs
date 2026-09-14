@@ -55,6 +55,12 @@ internal sealed partial class MenuEditor
     }
     private bool UpdateDropFromWindow(Point windowPoint,bool force=false)
     {
+        TrackPresetScroll(windowPoint);
+        if(UpdatePresetDrop(windowPoint))
+        {
+            dropProposal=null;hoverKey=null;overPresetDrop=false;lastDropWindowPoint=null;
+            savePreset.Background=presetThemeBrush;SetTrashHighlight(false);RefreshPreview();return false;
+        }
         // Snapshot the coordinate mapping once: animated visuals and relayout must
         // never move the insertion grid underneath a stationary physical pointer.
         dragWindowToPreview??=XamlRoot.Content.TransformToVisual(preview);
@@ -62,7 +68,7 @@ internal sealed partial class MenuEditor
         var savePoint=XamlRoot.Content.TransformToVisual(savePreset).TransformPoint(windowPoint);
         var wasOverPreset=overPresetDrop;
         overPresetDrop=savePoint.X>=0&&savePoint.Y>=0&&savePoint.X<=savePreset.ActualWidth&&savePoint.Y<=savePreset.ActualHeight;
-        savePreset.Background=overPresetDrop?Brush(40,110,80):Brush(38,44,56);
+        savePreset.Background=overPresetDrop?Brush(40,110,80):presetThemeBrush;
         if(!force&&wasOverPreset==overPresetDrop&&lastDropWindowPoint is Point last&&overTrash==lastOverTrash
             &&Math.Abs(windowPoint.X-last.X)<3&&Math.Abs(windowPoint.Y-last.Y)<3)return overTrash;
         lastDropWindowPoint=windowPoint;lastOverTrash=overTrash;
@@ -126,12 +132,13 @@ internal sealed partial class MenuEditor
     private async Task CompleteDropAsync(bool overTrash)
     {
         if(drag is null)return;
-        var current=drag;var wasMoved=moved;var proposal=dropProposal;var saveAsPreset=overPresetDrop;
+        var current=drag;var wasMoved=moved;var proposal=dropProposal;var saveAsPreset=overPresetDrop;var libraryDrop=presetDrop;
         CancelDrag(restorePreview:proposal is null||overTrash);
         if(!wasMoved)return;
         try
         {
-            if(saveAsPreset&&current.SourceId is not null)SaveSelectedPreset(current.SourceId);
+            if(libraryDrop is not null&&current.Preset is not null)CommitPresetDrop(current.Preset,libraryDrop);
+            else if(saveAsPreset&&current.SourceId is not null)await SaveSelectedPresetAsync(current.SourceId);
             else if(overTrash&&current.SourceId is not null)
             {
                 selectedButtonId=current.SourceId;await RemoveButtonAsync();
@@ -147,8 +154,9 @@ internal sealed partial class MenuEditor
     }
     private void CancelDrag(bool restorePreview=true)
     {
+        presetDragScroll.Stop();presetDragPoint=null;ClearPresetDrop();
         var had=drag is not null;drag=null;dropProposal=null;hoverKey=null;moved=false;
-        dragWindowToPreview=null;lastDropWindowPoint=null;lastOverTrash=false;overPresetDrop=false;savePreset.Background=Brush(38,44,56);
+        dragWindowToPreview=null;lastDropWindowPoint=null;lastOverTrash=false;overPresetDrop=false;savePreset.Background=presetThemeBrush;
         dragLayer.Children.Clear();dragGhost=null;preview.SetDraggedButton(null);SetTrashHighlight(false);
         var pointer=capturedPointer;capturedPointer=null;
         if(pointer is not null)root.ReleasePointerCapture(pointer);
@@ -220,34 +228,41 @@ internal sealed partial class MenuEditor
         }
         finally{dialogOpen=false;}
     }
-    private void SaveSelectedPreset(string? id=null)
-    {
-        id??=selectedButtonId;if(id is null||id==RadialMenuView.CenterButtonId)return;
-        try
-        {
-            var visual=preview.Buttons.Single(b=>b.Id==id);
-            draft.SavePreset(profileId,id,visual.Label,visual.Glyph);MarkDirty();RefreshPresets();Notify("已保存为独立预设。");
-        }
-        catch(Exception ex){Notify(ex.Message,InfoBarSeverity.Error);}
-    }
     private void RefreshPresets()
     {
-        presetCards.Children.Clear();
+        ClearPresetDrop();visiblePresetCards.Clear();RefreshPresetFolders();presetCards.Children.Clear();AddFolderCards();
+        var order=draft.PresetOrder.Select((id,index)=>(id,index)).ToDictionary(x=>x.id,x=>x.index);
         var builtins=actions.Select(a=>new ButtonPreset("builtin-"+a.Id,a.Name,a.Id,a.Glyph)).Append(new("builtin-shortcut","自定义快捷键","shortcuts.template","\uE765",Keys:new ushort[]{17,75}));
-        foreach(var preset in new[]{new ButtonPreset("builtin-blank","空白按钮","","\uE710")}.Concat(builtins).Concat(draft.Presets))
+        foreach(var preset in new[]{new ButtonPreset("builtin-blank","空白按钮","","\uE710")}.Concat(builtins).Concat(draft.Presets).OrderBy(p=>order.GetValueOrDefault(p.Id,int.MaxValue)))
         {
+            var action=actions.FirstOrDefault(a=>a.Id==preset.ActionId);
+            var category=action?.Category??"基础";
+            var builtin=!draft.Presets.Contains(preset);
+            if(!PresetInCurrentFolder(preset,builtin,category))continue;
+            var query=presetSearch.Text.Trim();
+            if(preset.Id!="builtin-blank"&&query.Length>0&&!($"{preset.Name} {action?.Name} {action?.Category} {(preset.Keys is null?"":ShortcutKeys.Format(preset.Keys))}").Contains(query,StringComparison.OrdinalIgnoreCase))continue;
             var stack=new StackPanel {Spacing=5};
             var heading=new StackPanel {Orientation=Orientation.Horizontal,Spacing=7};heading.Children.Add(ButtonIcons.Create(preset.Glyph,preset.Image,22));
-            heading.Children.Add(new TextBlock {Text=preset.Name,FontSize=12,TextWrapping=TextWrapping.Wrap,MaxWidth=100});stack.Children.Add(heading);
+            heading.Children.Add(new TextBlock {Text=preset.Name,FontSize=12,TextWrapping=TextWrapping.Wrap,MaxWidth=150});stack.Children.Add(heading);
             stack.Children.Add(new TextBlock {Text=preset.Keys is not null?ShortcutKeys.Format(preset.Keys):actions.FirstOrDefault(a=>a.Id==preset.ActionId)?.Name??preset.ActionId,FontSize=10,Opacity=0.6,TextTrimming=TextTrimming.CharacterEllipsis});
-            var card=new Border {Child=stack,Padding=new Thickness(10),CornerRadius=new CornerRadius(10),Background=Brush(38,44,56)};
+            var card=new Border {Child=stack,Padding=new Thickness(10),CornerRadius=new CornerRadius(10),Background=presetThemeBrush};
+            visiblePresetCards.Add((card,preset));
             card.PointerPressed+=(_,e)=>{if(e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)BeginDrag(null,preset,e);};
             if(draft.Presets.Any(p=>p.Id==preset.Id))
             {
-                var menu=new MenuFlyout();var remove=new MenuFlyoutItem{Text="删除此预设"};
+                var menu=new MenuFlyout();var move=new MenuFlyoutSubItem{Text="移动到文件夹"};
+                void Destination(string label,string? folderId)
+                {
+                    var item=new MenuFlyoutItem{Text=label};
+                    item.Click+=(_,_)=>{draft.MovePreset(preset.Id,folderId);MarkDirty();RefreshPresets();};
+                    move.Items.Add(item);
+                }
+                Destination("预设按钮",null);
+                foreach(var folder in draft.PresetFolders)Destination(FolderPath(folder.Id),folder.Id);
+                menu.Items.Add(move);var remove=new MenuFlyoutItem{Text="删除此预设"};
                 remove.Click+=(_,_)=>{draft.RemovePreset(preset.Id);MarkDirty();RefreshPresets();};menu.Items.Add(remove);card.ContextFlyout=menu;
             }
-            presetCards.Children.Add(card);
+            if(currentPresetFolder is null&&preset.Id=="builtin-blank")presetCards.Children.Insert(0,card);else presetCards.Children.Add(card);
         }
     }
     private async Task ShowIconsAsync()
