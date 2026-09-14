@@ -8,6 +8,12 @@ namespace MouseNavigator.Windows;
 public sealed class WindowCatalog : IWindowCatalog, IDisposable
 {
     private readonly IVirtualDesktopManager desktop = (IVirtualDesktopManager)new VirtualDesktopManager();
+    public static nint WindowAt(int x,int y)
+    {
+        var child=WindowFromPoint(new(){X=x,Y=y});
+        if(child==0)return 0;
+        var root=GetAncestor(child,2);return root==0?child:root;
+    }
     public static nint Foreground => GetForegroundWindow();
     public ApplicationContext Capture(nint hwnd)
     {

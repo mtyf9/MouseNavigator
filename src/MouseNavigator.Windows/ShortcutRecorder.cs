@@ -12,15 +12,16 @@ public sealed class ShortcutRecorder : IDisposable
     private readonly HookProc callback;
     private readonly Action<ushort[]?> completed;
     private readonly nint owner;
-    private readonly ShortcutRecording recording=new();
+    private ShortcutRecording recording=new();
+    private readonly bool continuous;
     private nint hook;
     private uint threadId;
     private Exception? startupError;
     private volatile bool finished;
     private bool disposed;
-    public ShortcutRecorder(nint owner,Action<ushort[]?> completed)
+    public ShortcutRecorder(nint owner,Action<ushort[]?> completed,bool continuous=false)
     {
-        this.owner=owner;this.completed=completed;callback=OnKeyboard;
+        this.owner=owner;this.completed=completed;this.continuous=continuous;callback=OnKeyboard;
         thread=new Thread(Pump){IsBackground=true,Name="MouseNavigator.ShortcutRecording"};thread.Start();ready.Wait();
         if(startupError is not null){ready.Dispose();throw startupError;}
     }
@@ -49,7 +50,7 @@ public sealed class ShortcutRecorder : IDisposable
             var id=message.ToInt32();
             if(id is not (0x100 or 0x101 or 0x104 or 0x105))return CallNextHookEx(hook,code,message,data);
             recording.Accept((ushort)value.Key,id is 0x100 or 0x104);
-            if(recording.Completed){finished=true;completed(recording.Keys);}
+            if(recording.Completed){var keys=recording.Keys;finished=!continuous||keys is null;if(!finished)recording=new();completed(keys);}
             return 1;
         }
         catch {finished=true;return CallNextHookEx(hook,code,message,data);}

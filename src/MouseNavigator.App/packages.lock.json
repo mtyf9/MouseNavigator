@@ -62,7 +62,8 @@
       "mousenavigator.actions.builtin": {
         "type": "Project",
         "dependencies": {
-          "MouseNavigator.Contracts": "[1.0.0, )"
+          "MouseNavigator.Contracts": "[1.0.0, )",
+          "MouseNavigator.Core": "[1.0.0, )"
         }
       },
       "mousenavigator.contracts": {

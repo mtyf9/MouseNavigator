@@ -19,7 +19,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")] internal static extern bool IsZoomed(nint hwnd);
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern nint WindowFromPoint(Point point);
+    [DllImport("user32.dll")] internal static extern nint GetAncestor(nint hwnd,uint flags);
     [DllImport("user32.dll")] internal static extern nint GetShellWindow();
     [DllImport("user32.dll")] internal static extern nint GetWindow(nint hwnd, uint command);
     [DllImport("user32.dll")] internal static extern nint GetLastActivePopup(nint hwnd);

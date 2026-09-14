@@ -4,7 +4,7 @@ using static MouseNavigator.Windows.NativeMethods;
 namespace MouseNavigator.Windows;
 
 public enum MousePhase { Down, Move, Up, Cancel }
-public readonly record struct MouseSample(MousePhase Phase, int X, int Y, nint Foreground);
+public readonly record struct MouseSample(MousePhase Phase, int X, int Y, nint Foreground, nint PointerWindow = 0);
 
 /// <summary>Dedicated message pump keeps WinUI rendering and plugin work outside the low-level callback.</summary>
 public sealed class MiddleMouseHook : IDisposable
@@ -64,7 +64,7 @@ public sealed class MiddleMouseHook : IDisposable
             if (id == 0x207 && enabled)
             {
                 held = true;
-                Input?.Invoke(new(MousePhase.Down, sample.Point.X, sample.Point.Y, GetForegroundWindow()));
+                Input?.Invoke(new(MousePhase.Down, sample.Point.X, sample.Point.Y, GetForegroundWindow(),WindowCatalog.WindowAt(sample.Point.X,sample.Point.Y)));
                 return 1;
             }
             if (held && id == 0x200)

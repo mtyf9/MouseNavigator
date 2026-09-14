@@ -21,6 +21,33 @@ public sealed class PlatformActions(IWindowCatalog catalog) : IPlatformActions
             ? ActionResult.Success($"已切换到 {selected.Title}")
             : ActionResult.Failure("Windows 未允许激活目标窗口，请重新触发手势。");
     }
+    public static bool FocusActionTarget(nint source)=>IsWindow(source)&&(GetForegroundWindow()==source||SetForegroundWindow(source));
+    public bool IsMacroTargetActive(nint source)=>IsWindow(source)&&GetForegroundWindow()==source;
+    public ActionResult LaunchApplication(ApplicationLaunch target)
+    {
+        try
+        {
+            ConfigurationCodec.ValidateLaunch(target);
+            if(!File.Exists(target.ExecutablePath))return ActionResult.Failure("程序不存在，请重新选择应用程序。");
+            using var process=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName=target.ExecutablePath,Arguments=target.Arguments,
+                WorkingDirectory=Path.GetDirectoryName(target.ExecutablePath)!,UseShellExecute=false
+            });
+            return process is null?ActionResult.Failure("程序未能启动。"):ActionResult.Success("已启动应用程序。");
+        }
+        catch(Exception ex) when(ex is ArgumentException or IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {return ActionResult.Failure("启动应用失败："+ex.Message);}
+    }
+    public ActionResult ToggleMaximize(nint source)
+    {
+        if(!IsWindow(source))return ActionResult.Failure("目标窗口已关闭。");
+        var restore=IsZoomed(source);
+        if(!restore&&(GetWindowLongPtrW(source,-16).ToInt64()&0x10000)==0)
+            return ActionResult.Failure("此窗口不支持最大化。");
+        if(!ShowWindowAsync(source,restore?9:3))return ActionResult.Failure("无法改变窗口状态。");
+        return ActionResult.Success(restore?"已还原窗口。":"已最大化窗口。");
+    }
     public ActionResult SendShortcut(nint source, params ushort[] keys)
     {
         if (!IsWindow(source)) return ActionResult.Failure("原应用窗口已关闭。");
@@ -38,7 +65,7 @@ public sealed class PlatformActions(IWindowCatalog catalog) : IPlatformActions
     private static Input Key(ushort key, bool up) => new()
     {
         Type = 1,
-        Value = new() { Keyboard = new() { Key = key, Flags = (up ? 2u : 0u) | (key is >= 0x21 and <= 0x28 or 0x2D or 0x2E or 0x5B or 0x5C ? 1u : 0u) } }
+        Value = new() { Keyboard = new() { Key = key, Flags = (up ? 2u : 0u) | (key is >= 0x21 and <= 0x28 or 0x2D or 0x2E or 0x5B or 0x5C or >= 0xAD and <= 0xB3 ? 1u : 0u) } }
     };
     public static bool ReplayMiddleClick()
     {
