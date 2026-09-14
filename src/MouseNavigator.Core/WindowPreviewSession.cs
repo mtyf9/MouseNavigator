@@ -49,11 +49,28 @@ public sealed class WindowPreviewLayout
     private readonly double cardWidth, cardHeight;
     public PreviewRect Previous => new(16, Height - 48, 112, 32);
     public PreviewRect Next => new(Width - 128, Height - 48, 112, 32);
-    public WindowPreviewLayout(double width, double height)
+    public WindowPreviewLayout(double width, double height, int windowCount = 0)
     {
         if (!double.IsFinite(width) || !double.IsFinite(height) || width < 240 || height < 240)
             throw new ArgumentException("预览区域过小。");
         Width = width; Height = height;
+        if(windowCount>0)
+        {
+            var maxColumns=Math.Max(1,(int)((width-20)/172));
+            var maxRows=Math.Max(1,(int)((height-124)/132));
+            var target=Math.Min(windowCount,maxColumns*maxRows);
+            double best=-1;
+            for(var cols=1;cols<=maxColumns;cols++)
+            {
+                var rows=(int)Math.Ceiling(target/(double)cols);if(rows>maxRows)continue;
+                var cw=(width-32-(cols-1)*12)/cols;
+                var ch=(height-136-(rows-1)*12)/rows;
+                var score=Math.Min(cw,(ch-50)/0.56);
+                if(score<=best)continue;
+                best=score;Columns=cols;Rows=rows;cardWidth=cw;cardHeight=ch;
+            }
+            return;
+        }
         Columns = Math.Clamp((int)((width - 20) / 232), 1, 4);
         cardWidth = (width - 32 - (Columns - 1) * 12) / Columns;
         cardHeight = Math.Min(cardWidth * 0.56 + 52, height - 136);

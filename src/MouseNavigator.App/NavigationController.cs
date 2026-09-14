@@ -23,6 +23,8 @@ internal sealed class NavigationController : IDisposable
     private readonly ConcurrentQueue<MouseSample> queue = new();
     private int scheduled;
     private bool active, visible, busy, disposed;
+    private CancellationTokenSource? execution;
+    private nint macroTarget;
     private int originX, originY;
     private double scale;
     private ApplicationContext? context;
@@ -43,6 +45,7 @@ internal sealed class NavigationController : IDisposable
         escapeTimer.Interval = TimeSpan.FromMilliseconds(80);
         escapeTimer.Tick += (_, _) =>
         {
+            if(busy&&(MiddleMouseHook.EscapePressed||(macroTarget!=0&&WindowCatalog.Foreground!=macroTarget)))execution?.Cancel();
             if (!active) return;
             try
             {
@@ -67,7 +70,7 @@ internal sealed class NavigationController : IDisposable
     public bool Enabled
     {
         get => hook.Enabled;
-        set { hook.Enabled = value; if (!value) Cancel(); }
+        set { hook.Enabled = value; if (!value){execution?.Cancel();Cancel();} }
     }
     public void ApplyConfiguration(ActionRegistry updatedRegistry, ProfileResolver updatedResolver)
     {
@@ -112,7 +115,7 @@ internal sealed class NavigationController : IDisposable
             Cancel();
             active = true; originX = sample.X; originY = sample.Y;
             scale = OverlayWindow.ScaleAt(sample.X, sample.Y);
-            context = catalog.Capture(sample.Foreground);
+            context = catalog.Capture(sample.PointerWindow!=0?sample.PointerWindow:sample.Foreground);
             menu = resolver.Resolve(context);
             if (!menu.Enabled) return; // Keep the held click until Up so ordinary middle clicks still replay.
             hasInteractiveAction = menu.Entries.Any(e => registry.Find(e.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview);
@@ -162,10 +165,10 @@ internal sealed class NavigationController : IDisposable
             Cancel();
             if (!wasVisible)
             {
-                if (WindowCatalog.Foreground == invocation.WindowHandle && !PlatformActions.ReplayMiddleClick())
+                if (WindowCatalog.WindowAt(sample.X,sample.Y) == invocation.WindowHandle && !PlatformActions.ReplayMiddleClick())
                     Completed?.Invoke(ActionResult.Failure("普通中键点击未能传递。"));
             }
-            else if (entry is not null && entry.ActionId.Length != 0) Execute(entry.ActionId, invocation);
+            else if (entry is not null && entry.ActionId.Length != 0) Execute(entry.ActionId, invocation with { Launch=entry.Launch, Macro=entry.Macro });
         }
     }
 #if DEBUG
@@ -180,26 +183,31 @@ internal sealed class NavigationController : IDisposable
 #endif
     private async void Execute(string id, ApplicationContext invocation)
     {
-        busy = true;
+        busy = true;execution=new();macroTarget=0;
         try
         {
-            var result = await registry.ExecuteAsync(id, invocation);
+            if(invocation.Macro is not null)
+            {
+                if(!PlatformActions.FocusActionTarget(invocation.WindowHandle)){Completed?.Invoke(ActionResult.Failure("无法激活鼠标下方的目标窗口，宏已取消。"));return;}
+                macroTarget=invocation.WindowHandle;
+            }
+            var result = await registry.ExecuteAsync(id, invocation,execution.Token);
             if (!disposed) Completed?.Invoke(result);
         }
-        finally { busy = false; }
+        finally { busy = false;macroTarget=0;execution?.Dispose();execution=null; }
     }
     private void OpenPreview(int x,int y)
     {
         pendingPreview=null;
         preview ??= new WindowPreviewWindow();
-        preview.ShowAt(x,y,catalog.Enumerate());previewRefreshAt=Environment.TickCount64+300;
+        preview.ShowAt(x,y,catalog.Enumerate(),menu?.PreviewAppearance);previewRefreshAt=Environment.TickCount64+300;
         ring.HideRing();visible=false;
     }
     private void Cancel() { pendingPreview=null; active = false; visible = false; ring.HideRing(); preview?.HidePreview(); }
     public void Dispose()
     {
         if (disposed) return;
-        disposed = true;
+        disposed = true;execution?.Cancel();
         escapeTimer.Stop();
         hook.Input -= OnInput;
         hook.Dispose();

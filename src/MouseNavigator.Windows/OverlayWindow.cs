@@ -49,7 +49,7 @@ public static class OverlayWindow
         return Math.Round(Math.Min(size * dpiScale,
             Math.Max(1, Math.Min(info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top) - 24))) / dpiScale;
     }
-    public static OverlayPanelPlacement PanelPlacement(int x, int y)
+    public static OverlayPanelPlacement PanelPlacement(int x, int y, int windowCount = 0)
     {
         var monitor = MonitorFromPoint(new() { X = x, Y = y }, 2);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
@@ -57,6 +57,14 @@ public static class OverlayWindow
         var scale = ScaleAt(x, y);
         var width = Math.Min(980, (info.Work.Right - info.Work.Left) / scale - 24);
         var height = Math.Min(640, (info.Work.Bottom - info.Work.Top) / scale - 24);
+        if(windowCount>0)
+        {
+            var maxWidth=(info.Work.Right-info.Work.Left)/scale-24;
+            var maxHeight=(info.Work.Bottom-info.Work.Top)/scale-24;
+            var columns=Math.Max(1,Math.Min((int)Math.Ceiling(Math.Sqrt(windowCount*1.6)),(int)((maxWidth-20)/172)));
+            width=Math.Min(maxWidth,Math.Max(360,columns*244+20));
+            height=Math.Min(maxHeight,Math.Max(300,Math.Ceiling(windowCount/(double)columns)*190+124));
+        }
         var pixelsX = (int)Math.Round(width * scale);
         var pixelsY = (int)Math.Round(height * scale);
         var left = Math.Clamp(x - pixelsX / 2, info.Work.Left, info.Work.Right - pixelsX);

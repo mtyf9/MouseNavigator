@@ -4,12 +4,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using MouseNavigator.Core;
+using MouseNavigator.Contracts;
 using MouseNavigator.Windows;
 
 namespace MouseNavigator.App;
 
 /// <summary>Non-activating selection surface. DWM owns the live image; WinUI owns the cards.</summary>
-internal sealed class WindowPreviewWindow : Window
+internal sealed partial class WindowPreviewWindow : Window
 {
     private readonly Canvas canvas = new();
     private readonly nint hwnd;
@@ -20,18 +21,21 @@ internal sealed class WindowPreviewWindow : Window
     private WindowPreviewSession? session;
     private OverlayPanelPlacement placement;
     private TextBlock? previous, next, hint;
+    private WindowPreviewAppearance appearance=new();
     private bool armed;
     private int openingX, openingY, lastX, lastY, pageDirection;
     private long pageAfter;
     public bool IsOpen { get; private set; }
 
-    public WindowPreviewWindow()
+    public WindowPreviewWindow(bool editing=false)
     {
-        Title = "MouseNavigator 窗口预览";
-        Content = canvas;
+        editingAppearance=editing;
+        Title = editing?"窗口预览外观":"MouseNavigator 窗口预览";
+        Content = canvas;SystemBackdrop=new TransparentBackdrop();
         canvas.Background = Brush(25, 29, 38);
         canvas.RequestedTheme = ElementTheme.Dark;
         hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if(editing)return;
         var presenter = (OverlappedPresenter)AppWindow.Presenter;
         presenter.SetBorderAndTitleBar(false, false);
         presenter.IsResizable = presenter.IsMaximizable = presenter.IsMinimizable = false;
@@ -39,11 +43,12 @@ internal sealed class WindowPreviewWindow : Window
         AppWindow.IsShownInSwitchers = false;
         OverlayWindow.Configure(hwnd);
     }
-    public void ShowAt(int x, int y, IReadOnlyList<WindowCandidate> windows)
+    public void ShowAt(int x, int y, IReadOnlyList<WindowCandidate> windows,WindowPreviewAppearance? appearance=null)
     {
-        HidePreview();
-        placement = OverlayWindow.PanelPlacement(x, y);
-        session = new(windows, new WindowPreviewLayout(placement.Width, placement.Height));
+        HidePreview();this.appearance=appearance??new();
+        canvas.Background=PreviewPalette.Background(this.appearance);
+        placement = OverlayWindow.PanelPlacement(x, y, windows.Count);
+        session = new(windows, new WindowPreviewLayout(placement.Width, placement.Height, windows.Count));
         openingX = lastX = x; openingY = lastY = y;
         armed = false; pageDirection = 0;
         BuildPage();
@@ -66,14 +71,14 @@ internal sealed class WindowPreviewWindow : Window
         {
             var rect = layout.Card(index % layout.Capacity);
             var image = layout.Image(index % layout.Capacity);
-            var card = new Border { CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(2),
-                Background = Brush(36, 42, 54), BorderBrush = Brush(57, 67, 85) };
+            var card = new Border { CornerRadius = new CornerRadius(appearance.CornerRadius), BorderThickness = new Thickness(2),
+                Background = PreviewPalette.Card(appearance), BorderBrush = PreviewPalette.Card(appearance) };
             cards[index] = card;
             Place(card, rect);
             var fallback = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center };
-            fallback.Children.Add(new FontIcon { Glyph = "\uE737", FontSize = 30, Opacity = 0.55 });
-            var status = new TextBlock { Text = "预览不可用", FontSize = 12, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center };
+            fallback.Children.Add(new FontIcon { Glyph = "\uE737", FontSize = 30, Opacity = 0.55,Foreground=PreviewPalette.Text(appearance) });
+            var status = new TextBlock { Text = "预览不可用", Foreground=PreviewPalette.Text(appearance), FontSize = 12, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center };
             fallback.Children.Add(status);
             statuses[index] = status;
             fallbacks[index] = fallback;
@@ -92,7 +97,7 @@ internal sealed class WindowPreviewWindow : Window
                 new(24, 110, layout.Width - 48, layout.Height - 210));
         previous = new TextBlock { Text = "‹  停留上一页", FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
         next = new TextBlock { Text = "停留下一页  ›", FontSize = 13, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        Place(previous, layout.Previous); Place(next, layout.Next);
+        if(session.PageCount>1){Place(previous, layout.Previous); Place(next, layout.Next);}
         Place(new TextBlock { Text = $"{session.Page + 1} / {session.PageCount}   ·   {session.Windows.Count} 个窗口",
             TextAlignment = TextAlignment.Center, FontSize = 12, Opacity = 0.65, VerticalAlignment = VerticalAlignment.Center },
             new(132, layout.Height - 48, layout.Width - 264, 32));
@@ -100,6 +105,7 @@ internal sealed class WindowPreviewWindow : Window
     }
     private void Place(FrameworkElement element, PreviewRect rect)
     {
+        if(element is TextBlock text)text.Foreground=PreviewPalette.Text(appearance);
         element.Width = Math.Max(0, rect.Width); element.Height = Math.Max(0, rect.Height);
         Canvas.SetLeft(element, rect.X); Canvas.SetTop(element, rect.Y);
         canvas.Children.Add(element);
@@ -137,11 +143,12 @@ internal sealed class WindowPreviewWindow : Window
     private void UpdateCardState()
     {
         if (session is null) return;
-        var selected = SelectionAt(lastX, lastY);
+        var selected = editingAppearance?editorSelection:SelectionAt(lastX, lastY);
         foreach (var (index, window) in session.Visible)
         {
             var alive = session.IsAvailable(window.Identity);
-            cards[index].BorderBrush = alive && selected?.Identity == window.Identity ? Brush(115, 175, 255) : Brush(57, 67, 85);
+            cards[index].BorderBrush = alive && selected?.Identity == window.Identity ? PreviewPalette.Highlight(appearance) : PreviewPalette.Card(appearance);
+            cards[index].Background=alive&&selected?.Identity==window.Identity?PreviewPalette.Highlight(appearance):PreviewPalette.Card(appearance);
             cards[index].Opacity = alive ? 1 : 0.4;
             if (!alive)
             {
@@ -152,13 +159,14 @@ internal sealed class WindowPreviewWindow : Window
         }
         if (previous is not null) previous.Opacity = session.Page > 0 ? 0.9 : 0.25;
         if (next is not null) next.Opacity = session.Page + 1 < session.PageCount ? 0.9 : 0.25;
+        if(editingAppearance){if(hint is not null)hint.Text="移动鼠标试览高亮 · 右侧调整外观";return;}
         if (hint is not null) hint.Text = selected is null ? "保持按住中键 · 移到窗口后松开切换 · Esc 取消" : "松开中键切换到选中窗口";
     }
     private void UpdateThumbnails()
     {
         if (session is null) return;
         foreach (var (index, thumbnail) in thumbnails.ToArray())
-            if (!thumbnail.Show(session.Layout.Image(index % session.Layout.Capacity), placement.Scale))
+            if (!ShowThumbnail(thumbnail,session.Layout.Image(index % session.Layout.Capacity)))
             { thumbnail.Dispose(); thumbnails.Remove(index); }
             else fallbacks[index].Visibility = Visibility.Collapsed;
     }

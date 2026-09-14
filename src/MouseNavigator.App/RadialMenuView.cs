@@ -51,7 +51,9 @@ internal sealed class RadialMenuView : UserControl
     public event Action<string, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? ButtonPressed;
     public RadialMenuView()
     {
-        Content = canvas; RequestedTheme = ElementTheme.Dark;
+        Content = canvas;
+        Loaded+=(_,_)=>themeSettings.ColorValuesChanged+=ThemeChanged;
+        Unloaded+=(_,_)=>themeSettings.ColorValuesChanged-=ThemeChanged; RequestedTheme = ElementTheme.Dark;
         centerHub.Children.Add(centerDisk); centerHub.Children.Add(centerContent);
         canvas.Children.Add(backdrop); canvas.Children.Add(buttonLayer); canvas.Children.Add(centerHub);
         animation.Tick += (_, _) => AdvanceAnimation();
@@ -65,6 +67,31 @@ internal sealed class RadialMenuView : UserControl
             else e.Handled = SelectAt(point.Position.X - Diameter / 2, point.Position.Y - Diameter / 2);
         };
     }
+    private readonly global::Windows.UI.ViewManagement.UISettings themeSettings=new();
+    private global::Windows.UI.Color Accent
+    {
+        get
+        {
+            var value=menu.AccentColor;
+            return value is {Length:7}&&uint.TryParse(value.AsSpan(1),System.Globalization.NumberStyles.HexNumber,null,out var rgb)
+                ?ColorHelper.FromArgb(255,(byte)(rgb>>16),(byte)(rgb>>8),(byte)rgb)
+                :themeSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Accent);
+        }
+    }
+    private SolidColorBrush MenuBrush(double strength)
+    {
+        var c=Accent;
+        return Brush((byte)(18+c.R*strength),(byte)(18+c.G*strength),(byte)(18+c.B*strength));
+    }
+    private SolidColorBrush StateBrush(bool active)
+    {
+        var hex=active?menu.AccentColor:menu.NormalColor;
+        var c=active?Accent:MenuBrush(0.17).Color;
+        if(hex is not null){var rgb=Convert.ToUInt32(hex[1..],16);c=ColorHelper.FromArgb(255,(byte)(rgb>>16),(byte)(rgb>>8),(byte)rgb);}
+        c.A=(byte)Math.Round(255*(active?menu.ActiveOpacity:menu.NormalOpacity));
+        return new(c);
+    }
+    private void ThemeChanged(global::Windows.UI.ViewManagement.UISettings sender,object args)=>DispatcherQueue.TryEnqueue(()=>Highlight(highlighted));
     public void SetMenu(MenuProfile menu, Func<string, ActionDescriptor?> resolve)
     {
         if (animation.IsEnabled) AdvanceAnimation();
@@ -73,14 +100,14 @@ internal sealed class RadialMenuView : UserControl
         var nextButtons = menu.Entries.Select(e =>
         {
             var action = resolve(e.ActionId);
-            return new MenuButtonVisual(e.Id, e.Label ?? action?.Name ?? (e.ActionId.Length == 0 ? "未配置" : "动作不可用"),
+            return new MenuButtonVisual(e.Id, e.Label ?? e.Macro?.Name ?? action?.Name ?? (e.ActionId.Length == 0 ? "未配置" : "动作不可用"),
                 e.Glyph ?? action?.Glyph ?? "\uE711", action?.Interaction ?? ActionInteraction.Invoke, e.Ring, e.Image);
         }).ToArray();
         // Pointer updates and property refreshes with the same destination must not
         // recreate visuals or restart a movement already in progress.
         if (this.menu.Id == menu.Id && this.menu.RingCount == menu.RingCount && Buttons.SequenceEqual(nextButtons)
             && Enumerable.Range(0,menu.RingCount).All(r=>Layout.Rotation(r)==new MultiRingLayout(menu).Rotation(r))
-            && this.menu.CenterText == menu.CenterText && this.menu.CenterImage == menu.CenterImage && this.menu.CenterGlyph == menu.CenterGlyph) { this.menu = menu; return; }
+            && this.menu.NormalColor==menu.NormalColor&&this.menu.ActiveOpacity==menu.ActiveOpacity&&this.menu.NormalOpacity==menu.NormalOpacity&&this.menu.ButtonGap==menu.ButtonGap&&this.menu.AccentColor == menu.AccentColor && this.menu.CenterText == menu.CenterText && this.menu.CenterImage == menu.CenterImage && this.menu.CenterGlyph == menu.CenterGlyph) { this.menu = menu; return; }
         this.menu = menu; Buttons = nextButtons;
         foreach (var id in tiles.Keys.Except(Buttons.Select(b => b.Id)).ToArray())
         {
@@ -90,12 +117,12 @@ internal sealed class RadialMenuView : UserControl
         Width = Height = canvas.Width = canvas.Height = Diameter;
         var middle = Diameter / 2;
         backdrop.Width = backdrop.Height = buttonLayer.Width = buttonLayer.Height = Diameter;
-        backdrop.Children.Add(new Ellipse { Width = Diameter, Height = Diameter, Fill = Brush(30, 34, 44) });
+
         for (var r = 0; r < menu.RingCount; r++)
         {
             var outline = new Ellipse { Width = Layout.Outer(r) * 2, Height = Layout.Outer(r) * 2,
                 Stroke = Brush(67, 77, 94), StrokeThickness = 1, IsHitTestVisible = false };
-            Place(outline, middle - Layout.Outer(r), middle - Layout.Outer(r)); backdrop.Children.Add(outline);
+            if(IsEditor&&!Buttons.Any(b=>b.Ring==r)){Place(outline, middle - Layout.Outer(r), middle - Layout.Outer(r));backdrop.Children.Add(outline);}
             if (!Buttons.Any(b => b.Ring == r) && IsEditor)
             {
                 var empty = new TextBlock { Text = $"拖入第 {r + 1} 圈", FontSize = 12, Opacity = 0.65, IsHitTestVisible = false };
@@ -110,7 +137,7 @@ internal sealed class RadialMenuView : UserControl
             var angle = RingGeometry.Angle(group.IndexOf(button), count) + Layout.Rotation(button.Ring);
             var radius = (Layout.Inner(button.Ring) + Layout.Outer(button.Ring)) / 2;
             var width = Math.Min(100, 2 * radius * Math.Sin(Math.PI / Math.Max(3, count)) - 8);
-            var target = new Pose(angle, Layout.Inner(button.Ring), Layout.Outer(button.Ring), 180d / count - RingGeometry.GapDegrees, width);
+            var target = new Pose(angle, Layout.Inner(button.Ring), Layout.Outer(button.Ring), 180d / count - Math.Max(count==1?0.001:0,menu.ButtonGap/2), width);
             var exists = tiles.TryGetValue(button.Id, out var tile);
             if (!exists) { tile = new Tile { Visual = button, Current = target }; tiles.Add(button.Id, tile); }
             var t = tile!;
@@ -186,8 +213,15 @@ internal sealed class RadialMenuView : UserControl
     public void Highlight(string? id)
     {
         highlighted = id;
-        centerDisk.Fill = IsEditor && id == CenterButtonId ? Brush(57,104,183) : Brush(42,48,61);
-        foreach (var (key, tile) in tiles) tile.Sector.Fill = key == id ? Brush(57,104,183) : Brush(39,45,58);
+        centerDisk.Fill = StateBrush(IsEditor && id == CenterButtonId);
+        void Contrast(StackPanel panel,SolidColorBrush fill)
+        {
+            var c=fill.Color;
+            var ink=new SolidColorBrush(c.A>180&&(.2126*c.R+.7152*c.G+.0722*c.B)>160?Colors.Black:Colors.White);
+            foreach(var child in panel.Children){if(child is TextBlock text)text.Foreground=ink;else if(child is FontIcon icon)icon.Foreground=ink;}
+        }
+        Contrast(centerContent,(SolidColorBrush)centerDisk.Fill);
+        foreach (var (key, tile) in tiles){var fill=StateBrush(key==id);tile.Sector.Fill=fill;Contrast(tile.Panel,fill);}
         var selected = Buttons.FirstOrDefault(b => b.Id == id);
         center.Text = menu.CenterText ?? (IsEditor && id == CenterButtonId ? "松开执行" : selected is null ? "取消" : selected.Interaction == ActionInteraction.WindowPreview ? "进入预览" : "松开执行");
         center.Visibility = center.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;

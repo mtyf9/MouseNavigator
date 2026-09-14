@@ -16,6 +16,7 @@ internal sealed class RingWindow : Window
     {
         Title = "MouseNavigator Ring";
         Content = new Microsoft.UI.Xaml.Controls.Viewbox { Child = surface };
+        SystemBackdrop=new TransparentBackdrop();
         hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var presenter = (OverlappedPresenter)AppWindow.Presenter;
         presenter.SetBorderAndTitleBar(false, false);
