@@ -17,6 +17,65 @@ internal static class SmokeScenario
         Directory.CreateDirectory(directory);
         try
         {
+            if(Environment.GetCommandLineArgs().Contains("--maximize-check"))
+            {
+                var focusedResults=new List<string>();await main.CheckMaximizeAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--unsaved-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckUnsavedAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--delete-menu-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckDeleteMenuAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--pointer-target-check"))
+            {
+                await Task.Delay(350);var focusedResults=new List<string>();
+                await main.CheckPointerTargetAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--folder-preview-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckFolderPreviewAsync(main,focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--preset-style-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckPresetStyleAsync(main,focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--macro-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckMacrosAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--appearance-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckAppearanceAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--action-editor-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckActionEditorAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
+            if(Environment.GetCommandLineArgs().Contains("--actions-check"))
+            {
+                await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
+                await main.EditorForSmoke.CheckActionsAsync(focusedResults,directory);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
             if(Environment.GetCommandLineArgs().Contains("--dpi-check"))
             {
                 await Task.Delay(350);var focusedResults=new List<string>();

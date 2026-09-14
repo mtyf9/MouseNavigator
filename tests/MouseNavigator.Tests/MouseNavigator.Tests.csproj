@@ -4,4 +4,5 @@
     <ProjectReference Include="../../src/MouseNavigator.Core/MouseNavigator.Core.csproj" />
     <ProjectReference Include="../../src/MouseNavigator.Actions.BuiltIn/MouseNavigator.Actions.BuiltIn.csproj" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../../src/MouseNavigator.App/DefaultProfiles.cs" Link="DefaultProfiles.cs" /></ItemGroup>
 </Project>

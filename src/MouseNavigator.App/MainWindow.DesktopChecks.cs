@@ -88,7 +88,7 @@ public sealed partial class MainWindow
         Check(EnabledSwitch.IsOn!=enabled,"Tray pause toggles the same switch as the home page");
         HandleTrayCommand(TrayCommand.Toggle);PauseForSmoke();
         await ApplyRestoredConfigurationAsync(original);
-        Navigation.SelectedItem=Navigation.MenuItems.Cast<Microsoft.UI.Xaml.Controls.NavigationViewItem>().First();
+        ShowEditorForSmoke();
         await Task.Delay(150);
         await SmokeScenario.RenderAsync((FrameworkElement)Content,Path.Combine(directory,"desktop-home.png"));
         tray?.Dispose();

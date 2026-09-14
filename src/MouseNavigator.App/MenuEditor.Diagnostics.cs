@@ -187,7 +187,7 @@ internal sealed partial class MenuEditor
     internal NavigatorConfiguration DraftForSmoke=>draft.Snapshot();
     internal void EditShortcutForSmoke()
     {
-        selectedButtonId="right";RefreshButton();actionChoice.SelectedItem=actionChoice.Items.Cast<ComboBoxItem>().Single(i=>(string)i.Tag=="$shortcut");
+        selectedButtonId="right";RefreshButton();SelectAction("$shortcut");
         shortcutName.Text="保存文件";mainKey.SelectedItem=mainKey.Items.Cast<ComboBoxItem>().Single(i=>(ushort)i.Tag==83);
     }
     internal async Task CheckOpenSelectionsForSmokeAsync(List<string> results)
@@ -195,11 +195,10 @@ internal sealed partial class MenuEditor
         var stable=true;
         foreach(var id in new[]{"windows.maximize","$shortcut","","windows.window.preview","windows.tasks"})
         {
-            actionChoice.IsDropDownOpen=true;await Task.Delay(80);
-            var item=actionChoice.Items.Cast<ComboBoxItem>().Single(i=>(string)i.Tag==id);actionChoice.SelectedItem=item;actionChoice.IsDropDownOpen=false;await Task.Delay(80);
-            stable&=ReferenceEquals(item,actionChoice.SelectedItem);
+            SelectAction(id);await Task.Delay(80);
+            stable&=id=="$shortcut"?draft.Shortcut(Entry?.ActionId)is not null:Entry?.ActionId==id;
         }
-        results.Add((stable?"PASS: ":"FAIL: ")+"Action dropdown retains selected containers");
+        results.Add((stable?"PASS: ":"FAIL: ")+"Categorized action selection updates the selected button");
     }
     internal async Task CheckButtonEditingForSmokeAsync(List<string> results)
     {

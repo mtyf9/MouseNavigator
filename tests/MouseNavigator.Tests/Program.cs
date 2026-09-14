@@ -469,6 +469,53 @@ Add("Existing version three menus without center fields retain default center",(
     const string json="""{"schemaVersion":3,"profiles":[{"schemaVersion":3,"id":"global","name":"Old","applications":[],"entries":[],"ringCount":1}],"shortcuts":[]}""";
     var p=ConfigurationCodec.Deserialize(json).Profiles[0];Equal<string?>(null,p.CenterText);Equal<string?>(null,p.CenterImage);
 });
+Add("Preset library ordering survives save and reload",()=>{
+    var draft=new ConfigurationDraft(Config());
+    draft.ReorderPresets(["builtin-a","builtin-b","builtin-c"],"builtin-c","builtin-a");
+    var copy=new ConfigurationDraft(ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot())));
+    Equal("builtin-c,builtin-a,builtin-b",string.Join(",",copy.PresetOrder));
+    copy.ReorderPresets(copy.PresetOrder.ToArray(),"builtin-c",null);
+    Equal("builtin-a,builtin-b,builtin-c",string.Join(",",copy.PresetOrder));
+    var before=string.Join(",",copy.PresetOrder);
+    Throws(()=>copy.ReorderPresets(copy.PresetOrder.ToArray(),"builtin-a","missing"));
+    Equal(before,string.Join(",",copy.PresetOrder));
+});
+Add("Preset library folder moves preserve macro image and shortcut data",()=>{
+    const string png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aMfoAAAAASUVORK5CYII=";
+    var draft=new ConfigurationDraft(Config());var parent=draft.AddPresetFolder("Parent");var child=draft.AddPresetFolder("Child",parent);
+    var macro=new MacroDefinition("Macro",[new(new ushort[]{17,67},200)]);
+    var original=new ButtonPreset("builtin-macro","Macro","windows.macro","\uE768",png,Macro:macro);
+    draft.PlacePreset(original,child);var copy=draft.Presets.Single();
+    Equal(false,copy.Id==original.Id);Equal(child,copy.FolderId);Equal(png,copy.Image);Equal(macro,copy.Macro);Equal(original.Glyph,copy.Glyph);
+    draft.PlacePreset(copy,parent);Equal(1,draft.Presets.Count);Equal(parent,draft.Presets.Single().FolderId);
+    draft.PlacePreset(draft.Presets.Single(),null);Equal<string?>(null,draft.Presets.Single().FolderId);
+    draft.PlacePreset(new("builtin-shortcut","Copy","shortcuts.template",Keys:new ushort[]{17,67}),child);
+    var restored=new ConfigurationDraft(draft.Snapshot());Equal("17,67",string.Join(",",restored.Presets.Last().Keys!));
+    Equal(png,restored.Presets.First().Image);Equal("17,67",string.Join(",",restored.Presets.First().Macro!.Steps[0].Keys));
+    Throws(()=>draft.PlacePreset(original,"missing"));Equal(2,draft.Presets.Count);
+});
+Add("Menu library initializes normal editable templates only once",()=>{
+    var initial=MouseNavigator.App.DefaultProfiles.InitializeMenus(Config());
+    Equal(true,initial.BuiltInMenusInitialized);
+    Equal(1,initial.Profiles.Count(p=>p.Name=="浏览器"));
+    var draft=new ConfigurationDraft(initial);var browser=draft.Profiles.Single(p=>p.Name=="浏览器");
+    draft.Update(browser.Id,"我的浏览器",browser.Applications,browser.Priority);
+    var restored=MouseNavigator.App.DefaultProfiles.InitializeMenus(ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot())));
+    Equal(0,restored.Profiles.Count(p=>p.Name=="浏览器"));
+    Equal(1,restored.Profiles.Count(p=>p.Name=="我的浏览器"));
+    draft.Delete(browser.Id);
+    restored=MouseNavigator.App.DefaultProfiles.InitializeMenus(ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot())));
+    Equal(false,restored.Profiles.Any(p=>p.Id==browser.Id));
+});
+Add("Blank preset stays pinned and cannot enter folders",()=>{
+    var draft=new ConfigurationDraft(Config());var folder=draft.AddPresetFolder("Test");
+    Throws(()=>draft.PlacePreset(new("builtin-blank","空白按钮",""),folder));
+    Throws(()=>draft.ReorderPresets(["builtin-blank","builtin-a"],"builtin-blank",null));
+    draft.ReorderPresets(["builtin-blank","builtin-a","builtin-b"],"builtin-b","builtin-a");
+    Equal("builtin-b,builtin-a",string.Join(",",draft.PresetOrder));
+    Equal(0,draft.Presets.Count);
+});
+if(args.Length>0)tests=tests.Where(t=>t.Name.Contains(args[0],StringComparison.OrdinalIgnoreCase)).ToList();
 var failed = 0;
 foreach (var (name, run) in tests)
 {
