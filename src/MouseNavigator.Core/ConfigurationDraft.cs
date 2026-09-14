@@ -8,13 +8,59 @@ public sealed class ConfigurationDraft
     private readonly List<MenuProfile> profiles;
     private readonly List<ShortcutDefinition> shortcuts;
     private readonly List<ButtonPreset> presets;
+    private readonly List<PresetFolder> folders;
+    private readonly List<string> presetOrder;
+    private readonly bool builtInMenusInitialized;
+    public IReadOnlyList<string> PresetOrder => presetOrder;
+    public void ReorderPresets(IReadOnlyList<string> visibleIds,string sourceId,string? beforeId)
+    {
+        if(sourceId=="builtin-blank"||beforeId=="builtin-blank")throw new ArgumentException("空白按钮固定在首位。");
+        var ordered=visibleIds.Where(id=>id!="builtin-blank").Distinct().ToList();
+        if(beforeId==sourceId)return;
+        if(!ordered.Remove(sourceId))throw new ArgumentException("预设不存在。");
+        var index=beforeId is null?ordered.Count:ordered.IndexOf(beforeId);
+        if(index<0)throw new ArgumentException("目标预设不存在。");
+        ordered.Insert(index,sourceId);
+        var affected=visibleIds.ToHashSet();
+        presetOrder.RemoveAll(affected.Contains);
+        presetOrder.AddRange(ordered);
+    }
+    public void PlacePreset(ButtonPreset preset,string? folderId)
+    {
+        if(preset.Id=="builtin-blank")throw new ArgumentException("空白按钮不能移入文件夹。");
+        if(folderId is not null&&!folders.Any(f=>f.Id==folderId))throw new ArgumentException("文件夹不存在。");
+        if(presets.Any(p=>p.Id==preset.Id)){MovePreset(preset.Id,folderId);return;}
+        var copy=preset with{Id="preset-"+Guid.NewGuid().ToString("N"),FolderId=folderId};
+        ConfigurationCodec.Validate(new(3,profiles,shortcuts,presets.Append(copy).ToArray(),folders));
+        presets.Add(copy);
+    }
+    public IReadOnlyList<PresetFolder> PresetFolders=>folders;
+    public string AddPresetFolder(string name,string? parentId=null)
+    {
+        name=name.Trim();
+        if(string.IsNullOrWhiteSpace(name)||name.Length>80||folders.Count>=100)throw new ArgumentException("文件夹名称需要 1～80 字，最多 100 个文件夹。");
+        if(parentId is not null&&!folders.Any(f=>f.Id==parentId))throw new ArgumentException("父文件夹不存在。");
+        if(folders.Any(f=>f.ParentId==parentId&&f.Name.Equals(name,StringComparison.OrdinalIgnoreCase)))throw new ArgumentException("文件夹名称已存在。");
+        var id="folder-"+Guid.NewGuid().ToString("N");folders.Add(new(id,name,parentId));return id;
+    }
+    public void SetPreviewAppearance(string id,WindowPreviewAppearance appearance)
+    {
+        ConfigurationCodec.ValidatePreviewAppearance(appearance);var p=Find(id);
+        profiles[profiles.IndexOf(p)]=p with{PreviewAppearance=appearance};
+    }
+    public void SetAppearanceOptions(string id,string? active,string? normal,double activeOpacity,double normalOpacity,double gap)
+    {
+        var p=Find(id);var next=p with{AccentColor=active,NormalColor=normal,ActiveOpacity=activeOpacity,NormalOpacity=normalOpacity,ButtonGap=gap};
+        ConfigurationCodec.Validate(new(3,profiles.Select(p=>p.Id==id?next:p).ToArray(),shortcuts,presets,folders));
+        profiles[profiles.IndexOf(p)]=next;
+    }
     public IReadOnlyList<ButtonPreset> Presets => presets;
     public IReadOnlyList<MenuProfile> Profiles => profiles;
     public ConfigurationDraft(NavigatorConfiguration configuration)
     {
         var copy = ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(configuration));
-        profiles = copy.Profiles.ToList();
-        shortcuts = copy.Shortcuts.ToList(); presets = (copy.Presets ?? []).ToList();
+        builtInMenusInitialized=copy.BuiltInMenusInitialized;profiles = copy.Profiles.ToList();presetOrder=(copy.PresetOrder??[]).ToList();
+        folders=(copy.PresetFolders??[]).ToList();shortcuts = copy.Shortcuts.ToList(); presets = (copy.Presets ?? []).ToList();
     }
     public MenuProfile Find(string id) => profiles.Single(p => p.Id == id);
     public ShortcutDefinition? Shortcut(string? actionId) => shortcuts.FirstOrDefault(s => s.Id == actionId);
@@ -38,6 +84,11 @@ public sealed class ConfigurationDraft
     {
         _=Find(id);
         for(var i=0;i<profiles.Count;i++)profiles[i]=profiles[i] with{IsGlobalDefault=profiles[i].Id==id};
+    }
+    public void SetAccent(string id,string? color)
+    {
+        if(color is not null&&(color.Length!=7||color[0]!='#'||!color.AsSpan(1).ToString().All(Uri.IsHexDigit)))throw new ArgumentException("颜色需要为 #RRGGBB。");
+        var p=Find(id);profiles[profiles.IndexOf(p)]=p with{AccentColor=color};
     }
     public void SetSize(string id, double scale)
     {
@@ -73,7 +124,7 @@ public sealed class ConfigurationDraft
         var next=profiles.Where(p=>p.Id!=imported.Id).Append(imported).ToArray();
         var referenced=next.SelectMany(p=>p.Entries).Select(e=>e.ActionId).ToHashSet();
         var definitions=shortcuts.Concat(document.Shortcuts.Select(s=>s with{Id=remap[s.Id]})).Where(s=>referenced.Contains(s.Id)).ToArray();
-        ConfigurationCodec.Validate(new(3,next,definitions,presets));
+        ConfigurationCodec.Validate(new(3,next,definitions,presets,folders));
         if(existing is null)profiles.Add(imported);else profiles[profiles.IndexOf(existing)]=imported;
         shortcuts.Clear();shortcuts.AddRange(definitions);PruneShortcuts();return imported.Id;
     }
@@ -120,8 +171,24 @@ public sealed class ConfigurationDraft
         var entries = profile.Entries.ToList();
         var index = entries.FindIndex(e => e.Id == buttonId);
         if (index < 0) throw new ArgumentException("按钮不存在。");
-        entries[index] = entries[index] with { ActionId = actionId ?? "" };
+        entries[index] = entries[index] with { ActionId = actionId ?? "", Macro = actionId=="windows.macro"?entries[index].Macro:null, Launch = actionId=="windows.applications.launch"?entries[index].Launch:null };
         ReplaceEntries(profile, entries);
+        PruneShortcuts();
+    }
+    public void SetMacro(string id,string buttonId,MacroDefinition macro)
+    {
+        MacroValidation.Validate(macro);
+        var p=Find(id);
+        if(!p.Entries.Any(e=>e.Id==buttonId))throw new ArgumentException("按钮不存在。");
+        ReplaceEntries(p,p.Entries.Select(e=>e.Id==buttonId?e with{ActionId="windows.macro",Macro=macro,Launch=null}:e));
+        PruneShortcuts();
+    }
+    public void SetLaunch(string id,string buttonId,ApplicationLaunch target)
+    {
+        ConfigurationCodec.ValidateLaunch(target);
+        var p=Find(id);
+        if(!p.Entries.Any(e=>e.Id==buttonId))throw new ArgumentException("按钮不存在。");
+        ReplaceEntries(p,p.Entries.Select(e=>e.Id==buttonId?e with{ActionId="windows.applications.launch",Launch=target,Macro=null}:e));
         PruneShortcuts();
     }
     public void SetShortcut(string id, string buttonId, string name, IReadOnlyList<ushort> keys)
@@ -151,17 +218,24 @@ public sealed class ConfigurationDraft
             RingRotations = profile.RingRotations?.Where(p=>p.Key!=ring).ToDictionary(p=>p.Key>ring?p.Key-1:p.Key,p=>p.Value) };
         PruneShortcuts();
     }
-    public ButtonPreset SavePreset(string id, string buttonId, string label, string? glyph)
+    public ButtonPreset SavePreset(string id, string buttonId, string label, string? glyph, string? folderId=null)
     {
         var entry = Find(id).Entries.Single(e => e.Id == buttonId);
         if (string.IsNullOrWhiteSpace(label) || label.Length>80) throw new ArgumentException("预设名称无效。");
 
+        if(folderId is not null&&!folders.Any(f=>f.Id==folderId))throw new ArgumentException("预设文件夹不存在。");
         var preset = new ButtonPreset("preset-" + Guid.NewGuid().ToString("N"), label, entry.ActionId,
-            glyph, entry.Image, Shortcut(entry.ActionId)?.Keys.ToArray());
+            glyph, entry.Image, Shortcut(entry.ActionId)?.Keys.ToArray(),entry.Launch,entry.Macro,folderId);
         presets.Add(preset);
         return preset;
     }
-    public void RemovePreset(string id) => presets.RemoveAll(p => p.Id == id);
+    public void MovePreset(string id,string? folderId)
+    {
+        if(folderId is not null&&!folders.Any(f=>f.Id==folderId))throw new ArgumentException("文件夹不存在。");
+        var index=presets.FindIndex(p=>p.Id==id);if(index<0)throw new ArgumentException("预设不存在。");
+        presets[index]=presets[index] with{FolderId=folderId};
+    }
+    public void RemovePreset(string id) {presets.RemoveAll(p => p.Id == id);presetOrder.Remove(id);}
     public void CommitDrop(string id, MenuProfile proposal, ButtonPreset? preset, string? newButtonId)
     {
         var current = Find(id);
@@ -177,7 +251,7 @@ public sealed class ConfigurationDraft
             proposal=proposal with {Entries=proposal.Entries.Select(e=>e.Id==newButtonId?e with{ActionId=actionId}:e).ToArray()};
         }
         var candidates=profiles.Select(p=>p.Id==id?proposal:p).ToArray();
-        ConfigurationCodec.Validate(new(3,candidates,nextShortcuts,presets));
+        ConfigurationCodec.Validate(new(3,candidates,nextShortcuts,presets,folders));
         profiles[profiles.IndexOf(current)]=proposal;
         shortcuts.Clear();shortcuts.AddRange(nextShortcuts);PruneShortcuts();
     }
@@ -185,7 +259,7 @@ public sealed class ConfigurationDraft
         profiles[profiles.IndexOf(profile)] = MultiRingLayout.AlignChangedCounts(profile, profile with { Entries = entries.ToArray() });
     public NavigatorConfiguration Snapshot()
     {
-        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray());
+        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray(),folders.ToArray(),presetOrder.ToArray(),builtInMenusInitialized);
         ConfigurationCodec.Validate(result);
         return result;
     }

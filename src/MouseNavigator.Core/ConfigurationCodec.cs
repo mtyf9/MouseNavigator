@@ -51,6 +51,19 @@ public static class ConfigurationCodec
                 throw new ArgumentException("自定义快捷键名称或标识无效，或标识重复。");
             ShortcutKeys.Validate(shortcut.Keys);
         }
+        var folders=configuration.PresetFolders??[];
+        if(folders.Count>100||folders.Any(f=>f is null||!ValidId(f.Id)||string.IsNullOrWhiteSpace(f.Name)||f.Name.Length>80)||folders.Select(f=>f.Id).Distinct().Count()!=folders.Count||folders.GroupBy(f=>f.ParentId).Any(g=>g.Select(f=>f.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=g.Count()))throw new ArgumentException("预设文件夹无效或重复。");
+        var folderMap=folders.ToDictionary(f=>f.Id);
+        foreach(var folder in folders)
+        {
+            var seen=new HashSet<string>();string? current=folder.Id;
+            while(current is not null)
+            {
+                if(!seen.Add(current)||!folderMap.TryGetValue(current,out var node))throw new ArgumentException("文件夹父级无效或形成循环。");
+                current=node.ParentId;
+            }
+        }
+        if(configuration.PresetOrder is {} order && (order.Count>10000 || order.Any(id=>!ValidId(id)) || order.Distinct().Count()!=order.Count))throw new ArgumentException("预设排序无效。");
         var presets = configuration.Presets ?? [];
         var presetIds = new HashSet<string>();
         foreach (var preset in presets)
@@ -58,27 +71,48 @@ public static class ConfigurationCodec
             if (preset is null || !ValidId(preset.Id) || !presetIds.Add(preset.Id) || string.IsNullOrWhiteSpace(preset.Name)
                 || preset.Name.Length > 80 || (preset.ActionId is null || (preset.ActionId.Length > 0 && !ValidId(preset.ActionId))) || preset.Glyph?.Length > 8)
                 throw new ArgumentException("预设按钮无效。");
+            if(preset.FolderId is not null&&!folders.Any(f=>f.Id==preset.FolderId))throw new ArgumentException("预设按钮引用了不存在的文件夹。");
             if (preset.Keys is not null) ShortcutKeys.Validate(preset.Keys);
             else if (preset.ActionId.StartsWith("shortcuts.")) throw new ArgumentException("快捷键预设缺少按键。");
-            ValidateImage(preset.Image);
+            ValidateImage(preset.Image);ValidateLaunch(preset.Launch);if(preset.Macro is not null)MacroValidation.Validate(preset.Macro);
         }
         foreach (var profile in configuration.Profiles)
         {
+            ValidatePreviewAppearance(profile.PreviewAppearance);
             if (profile.CenterText?.Length > 40) throw new ArgumentException("中心文字不能超过 40 个字符。");
             if (profile.CenterGlyph?.Length > 8) throw new ArgumentException("中心图标无效。");
             ValidateImage(profile.CenterImage);
+            if(profile.AccentColor is {} color&&(color.Length!=7||color[0]!='#'||!color[1..].All(Uri.IsHexDigit)))throw new ArgumentException("菜单颜色需要为 #RRGGBB。");
+            if(profile.NormalColor is {} normal&&(normal.Length!=7||normal[0]!='#'||!normal[1..].All(Uri.IsHexDigit)))throw new ArgumentException("非触发颜色需要为 #RRGGBB。");
+            if(!double.IsFinite(profile.ActiveOpacity)||profile.ActiveOpacity is <0 or >1||!double.IsFinite(profile.NormalOpacity)||profile.NormalOpacity is <0 or >1||!double.IsFinite(profile.ButtonGap)||profile.ButtonGap is <0 or >20)throw new ArgumentException("透明度或按钮间隙无效。");
             if (!double.IsFinite(profile.SizeScale) || profile.SizeScale is < 0.5 or > 2) throw new ArgumentException("悬浮窗大小必须为 50% 到 200%。");
             if(profile.RingRotations is not null && profile.RingRotations.Any(pair=>pair.Key<0||pair.Key>=profile.RingCount||!double.IsFinite(pair.Value)||pair.Value<0||pair.Value>=360))
                 throw new ArgumentException("圈旋转角度无效。");
         }
         foreach (var entry in configuration.Profiles.SelectMany(p => p.Entries))
         {
-            ValidateImage(entry.Image);
+            ValidateImage(entry.Image);ValidateLaunch(entry.Launch);if(entry.Macro is not null)MacroValidation.Validate(entry.Macro);
             if (entry.ActionId.Length == 0) continue;
             if (!ValidId(entry.ActionId)) throw new ArgumentException("动作标识无效。");
             if (entry.ActionId.StartsWith("shortcuts.", StringComparison.Ordinal) && !ids.Contains(entry.ActionId))
                 throw new ArgumentException($"缺少快捷键定义：{entry.ActionId}");
         }
+    }
+    public static void ValidatePreviewAppearance(WindowPreviewAppearance? value)
+    {
+        if(value is null)return;
+        foreach(var color in new[]{value.BackgroundColor,value.CardColor,value.HighlightColor,value.TextColor})
+            if(color is not null&&(color.Length!=7||color[0]!='#'||!color[1..].All(Uri.IsHexDigit)))throw new ArgumentException("窗口预览颜色无效。");
+        if(!double.IsFinite(value.BackgroundOpacity)||value.BackgroundOpacity is <0 or >1||!double.IsFinite(value.CardOpacity)||value.CardOpacity is <0 or >1||!double.IsFinite(value.CornerRadius)||value.CornerRadius is <0 or >30)throw new ArgumentException("窗口预览透明度或圆角无效。");
+    }
+    public static void ValidateLaunch(ApplicationLaunch? launch)
+    {
+        if(launch is null)return;
+        if(string.IsNullOrWhiteSpace(launch.ExecutablePath)||launch.ExecutablePath.Length>1024
+            ||!Path.IsPathFullyQualified(launch.ExecutablePath)||launch.ExecutablePath.IndexOfAny(['"','\0','\r','\n'])>=0
+            ||!Path.GetExtension(launch.ExecutablePath).Equals(".exe",StringComparison.OrdinalIgnoreCase)
+            ||launch.Arguments is null||launch.Arguments.Length>4096||launch.Arguments.Contains('\0'))
+            throw new ArgumentException("请选择完整的 .exe 程序路径，启动参数不能超过 4096 个字符。");
     }
     private static string Upgrade(string json)
     {

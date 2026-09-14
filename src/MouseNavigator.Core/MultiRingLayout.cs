@@ -53,7 +53,7 @@ public sealed class MultiRingLayout(MenuProfile menu)
         var step = 360d / entries.Length;
         var index = (int)Math.Floor((angle + step/2)/step)%entries.Length;
         var distance = Math.Abs((angle-index*step+540)%360-180);
-        return includeGaps || distance <= step/2-RingGeometry.GapDegrees ? entries[index].Id : null;
+        return includeGaps || distance <= step/2-menu.ButtonGap/2 ? entries[index].Id : null;
     }
 }
 /// <summary>A drag previews from the original snapshot, never incrementally mutating the draft.</summary>
@@ -94,7 +94,7 @@ public sealed class MenuDragSession
             added = source with { Ring = ring };
         }
         else if (Preset is not null)
-            added = new(NewButtonId, Preset.ActionId, Preset.Name, Preset.Glyph, ring, Preset.Image);
+            added = new(NewButtonId, Preset.ActionId, Preset.Name, Preset.Glyph, ring, Preset.Image, Preset.Launch, Preset.Macro);
         else throw new ArgumentException("没有可拖动的按钮。");
         var group = entries.Where(e => e.Ring == ring).ToList();
         if (group.Count >= RingGeometry.MaximumButtons) throw new ArgumentException("此圈已满，请添加外圈。");
