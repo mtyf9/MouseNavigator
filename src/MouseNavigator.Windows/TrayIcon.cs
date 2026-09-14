@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 namespace MouseNavigator.Windows;
 
-public enum TrayCommand { Open = 1, Toggle = 2, Exit = 3 }
+public enum TrayCommand { Open = 1, Toggle = 2, Exit = 3, Startup = 4, Backup = 5, Restore = 6 }
 
 /// <summary>UI-thread-owned notification icon; recreates itself after Explorer restarts.</summary>
 public sealed class TrayIcon : IDisposable
@@ -16,6 +16,8 @@ public sealed class TrayIcon : IDisposable
     private readonly uint taskbarCreated = RegisterWindowMessageW("TaskbarCreated");
     private static readonly uint ShowMessage = RegisterWindowMessageW("MouseNavigator.ShowMainWindow");
     private bool disposed, enabled = true, canToggle = true;
+    public bool StartupEnabled {get;set;}
+    public bool CanChangeStartup {get;set;}=true;
     public bool Registered { get; private set; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct IconData
@@ -94,14 +96,17 @@ public sealed class TrayIcon : IDisposable
         try
         {
             AppendMenuW(menu, 0, 1, "打开主界面");
-            AppendMenuW(menu, canToggle ? 0u : 1u, 2, enabled ? "暂停悬浮导航" : "启用悬浮导航");
+            AppendMenuW(menu,(enabled?8u:0u)|(canToggle?0u:1u),2,"启用悬浮窗");
+            AppendMenuW(menu,(StartupEnabled?8u:0u)|(CanChangeStartup?0u:1u),4,"开机启动");
+
+
             AppendMenuW(menu, 0x800, 0, null);
             AppendMenuW(menu, 0, 3, "退出");
             NativeMethods.GetCursorPos(out var point);
             NativeMethods.SetForegroundWindow(hwnd);
             var command = TrackPopupMenuEx(menu, 0x100 | 0x2, point.X, point.Y, hwnd, 0);
             PostMessageW(hwnd, 0, 0, 0);
-            if (command is >= 1 and <= 3) dispatch((TrayCommand)command);
+            if (command is >= 1 and <= 6) dispatch((TrayCommand)command);
         }
         finally { DestroyMenu(menu); }
     }

@@ -18,17 +18,23 @@ public sealed partial class MainWindow : Window
     private ActionRegistry registry;
     private NavigationController? controller;
     private bool closeApproved, closeDialogOpen;
+    // These state controls are not mounted in the window; the tray owns their commands.
+    private readonly ToggleSwitch EnabledSwitch=new(){IsOn=true},StartupSwitch=new();
+    private readonly TextBlock StartupHint=new(),ContextText=new();
+    private InfoBar StatusBar=>editor.NotificationBar;
+    private readonly Button BackupButton=new(),RestoreButton=new();
 
     public MainWindow()
     {
         InitializeComponent();
+        EnabledSwitch.Toggled+=EnabledSwitch_Toggled;StartupSwitch.Toggled+=StartupSwitch_Toggled;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         SystemBackdrop = new MicaBackdrop();
         var scale = OverlayWindow.WindowScale(WinRT.Interop.WindowNative.GetWindowHandle(this));
         var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
-        var width = Math.Min((int)(1280 * scale), area.Width - (int)(32 * scale));
-        var height = Math.Min((int)(760 * scale), area.Height - (int)(32 * scale));
+        var width = Math.Min((int)(1480 * scale), area.Width - (int)(32 * scale));
+        var height = Math.Min((int)(980 * scale), area.Height - (int)(32 * scale));
         AppWindow.MoveAndResize(new(area.X + (area.Width - width) / 2, area.Y + (area.Height - height) / 2, width, height));
         catalog = new WindowCatalog();
         platform = new PlatformActions(catalog);
@@ -39,20 +45,22 @@ public sealed partial class MainWindow : Window
         editor = new MenuEditor(loaded.Configuration, registry.Actions
             .Where(a => !a.Descriptor.Id.StartsWith("shortcuts.", StringComparison.Ordinal)).Select(a => a.Descriptor).ToArray())
         {
+            OpenSettingsRequested=ShowSettingsWindow,
             OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this),
             SaveRequested = SaveConfigurationAsync,
             PickImageRequested = PickIconAsync,
             PickProgramsRequested = PickProgramsAsync,
+            PickApplicationRequested = PickApplicationAsync,
             ImportMenuRequested = ImportMenuAsync,
             ExportMenuRequested = ExportMenuAsync
         };
         ProfilesPage.Children.Add(editor);
         AppWindow.Changed+=(_,_)=>editor.RefreshDisplaySize();
-        RefreshActions();
+
         if (loaded.Warning is not null)
         {
-            editor.Notify(loaded.Warning, InfoBarSeverity.Warning);
-            StatusBar.Title = "配置读取提示"; StatusBar.Message = loaded.Warning; StatusBar.Severity = InfoBarSeverity.Warning;
+
+            editor.Notify(loaded.Warning,InfoBarSeverity.Warning,"配置读取提示");
         }
         try
         {
@@ -60,18 +68,14 @@ public sealed partial class MainWindow : Window
             controller.ContextChanged += text => ContextText.Text = text;
             controller.Completed += result =>
             {
-                StatusBar.Title = result.Succeeded ? "已完成" : "未执行";
-                StatusBar.Message = result.Message;
-                StatusBar.Severity = result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
+                if(!result.Succeeded)editor.Notify(result.Message,InfoBarSeverity.Warning,"未执行");
             };
         }
         catch (Exception ex)
         {
             EnabledSwitch.IsOn = false;
             EnabledSwitch.IsEnabled = false;
-            StatusBar.Title = "鼠标监听启动失败";
-            StatusBar.Message = ex.Message;
-            StatusBar.Severity = InfoBarSeverity.Error;
+            editor.Notify(ex.Message,InfoBarSeverity.Error,"鼠标监听启动失败");
         }
         AppWindow.Closing += (sender, args) =>
         {
@@ -82,7 +86,7 @@ public sealed partial class MainWindow : Window
             else _=RequestExitAsync();
         };
         Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)editor.StopRecording();else RefreshStartupState();};
-        Closed += (_, _) => { tray?.Dispose();editor.StopRecording();controller?.Dispose(); catalog.Dispose(); };
+        Closed += (_, _) => { settingsWindow?.Close();tray?.Dispose();editor.StopRecording();controller?.Dispose(); catalog.Dispose(); };
         InitializeDesktopIntegration();
     }
 
@@ -111,7 +115,7 @@ public sealed partial class MainWindow : Window
         await Task.Run(() => store.Save(configuration));
         controller?.ApplyConfiguration(updatedRegistry, updatedResolver);
         registry = updatedRegistry;
-        RefreshActions();
+
         ContextText.Text = "配置已更新，等待下一次导航";
     }
     private async Task<NavigatorConfiguration?> ImportConfigurationAsync()
@@ -133,6 +137,12 @@ public sealed partial class MainWindow : Window
         if (file is null) return;
         await FileIO.WriteTextAsync(file, json);
         ShowHomeStatus("备份完成","全部菜单和预设已保存到备份文件。",InfoBarSeverity.Success);
+    }
+    private async Task<string?> PickApplicationAsync()
+    {
+        var picker=new FileOpenPicker();picker.FileTypeFilter.Add(".exe");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        return (await picker.PickSingleFileAsync())?.Path;
     }
     private async Task<IReadOnlyList<string>> PickProgramsAsync()
     {
@@ -164,42 +174,19 @@ public sealed partial class MainWindow : Window
         var file=await picker.PickSingleFileAsync();
         return file is null?null:await ButtonIcons.ImportAsync(file);
     }
-    private void RefreshActions()
-    {
-        ActionsList.Children.Clear();
-        foreach (var action in registry.Actions)
-            ActionsList.Children.Add(Card(action.Descriptor.Name, action.Descriptor.Description));
-    }
-
 #if DEBUG
     internal void PauseForSmoke() { if (controller is not null) controller.Enabled = false; }
     internal MenuEditor EditorForSmoke => editor;
     internal void ShowEditorForSmoke()
     {
-        Navigation.SelectedItem = Navigation.MenuItems.Cast<NavigationViewItem>().Single(i => (string)i.Tag == "profiles");
+        ProfilesPage.Visibility=Visibility.Visible;
     }
     internal void ScrollEditorForSmoke() => PageScroll.ChangeView(null, PageScroll.ScrollableHeight, null);
     internal void CloseForSmoke() { closeApproved = true; Close(); }
 #endif
-    private static Border Card(string title, string detail)
-    {
-        var stack = new StackPanel { Spacing = 8 };
-        stack.Children.Add(new TextBlock { Text = title, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        stack.Children.Add(new TextBlock { Text = detail, TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
-        return new Border { Padding = new Thickness(22), CornerRadius = new CornerRadius(12),
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"], Child = stack };
-    }
     private void EnabledSwitch_Toggled(object sender, RoutedEventArgs e)
     {
         if (controller is not null) controller.Enabled = EnabledSwitch.IsOn;
         tray?.Update(EnabledSwitch.IsOn,EnabledSwitch.IsEnabled&&controller is not null);
-    }
-    private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        if (HomePage is null || ProfilesPage is null || ActionsPage is null) return;
-        var page = (args.SelectedItem as NavigationViewItem)?.Tag as string;
-        HomePage.Visibility = page == "home" ? Visibility.Visible : Visibility.Collapsed;
-        ProfilesPage.Visibility = page == "profiles" ? Visibility.Visible : Visibility.Collapsed;
-        ActionsPage.Visibility = page == "actions" ? Visibility.Visible : Visibility.Collapsed;
     }
 }

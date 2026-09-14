@@ -20,7 +20,7 @@ public sealed partial class MainWindow
             AppWindow.SetIcon(iconPath);
             tray=new(WinRT.Interop.WindowNative.GetWindowHandle(this),iconPath,
                 command=>DispatcherQueue.TryEnqueue(()=>HandleTrayCommand(command)));
-            tray.Update(EnabledSwitch.IsOn,EnabledSwitch.IsEnabled&&controller is not null);
+            tray.Update(EnabledSwitch.IsOn,EnabledSwitch.IsEnabled&&controller is not null);RefreshStartupState();
         }
         catch(Exception ex){ShowHomeStatus("托盘初始化失败","关闭窗口将退出程序。"+ex.Message,InfoBarSeverity.Warning);}
     }
@@ -35,14 +35,14 @@ public sealed partial class MainWindow
             StartupHint.Text=StartupSwitch.IsOn?"已设置：登录 Windows 后驻留托盘。":"登录 Windows 后自动运行，启动后驻留托盘。";
         }
         catch(Exception ex){StartupSwitch.IsEnabled=false;StartupHint.Text="无法读取开机启动设置："+ex.Message;}
-        finally{startupLoading=false;}
+        finally{startupLoading=false;if(tray is not null){tray.StartupEnabled=StartupSwitch.IsOn;tray.CanChangeStartup=StartupSwitch.IsEnabled;}}
     }
     private void StartupSwitch_Toggled(object sender,RoutedEventArgs e)
     {
         if(startupLoading||startup is null)return;
         try
         {
-            startup.SetEnabled(StartupSwitch.IsOn);
+            startup.SetEnabled(StartupSwitch.IsOn);if(tray is not null)tray.StartupEnabled=StartupSwitch.IsOn;
             StartupHint.Text=StartupSwitch.IsOn?"已设置：登录 Windows 后驻留托盘。":"已关闭开机启动。";
         }
         catch(Exception ex){RefreshStartupState();ShowHomeStatus("开机启动设置失败",ex.Message,InfoBarSeverity.Error);}
@@ -55,6 +55,10 @@ public sealed partial class MainWindow
             case TrayCommand.Toggle:
                 if(EnabledSwitch.IsEnabled)EnabledSwitch.IsOn=!EnabledSwitch.IsOn;
                 break;
+            case TrayCommand.Startup:
+                RefreshStartupState();if(StartupSwitch.IsEnabled)StartupSwitch.IsOn=!StartupSwitch.IsOn;break;
+            case TrayCommand.Backup: ShowSettingsWindow();break;
+            case TrayCommand.Restore: ShowSettingsWindow();break;
             case TrayCommand.Exit:
                 if(homeOperation||editor.HasOpenDialog||!editor.IsEnabled){ShowMainWindow();return;}
                 _=RequestExitAsync();break;
@@ -70,6 +74,7 @@ public sealed partial class MainWindow
         closeDialogOpen=true;editor.StopRecording();
         try
         {
+            if(!await editor.ConfirmPendingChangesAsync("关闭"))return;
             if(!File.Exists(TrayHintPreferencePath))
             {
                 var remember=new CheckBox{Content="不再提示"};
@@ -105,20 +110,7 @@ public sealed partial class MainWindow
         closeDialogOpen=true;
         try
         {
-            if(editor.IsDirty)
-            {
-                ShowMainWindow();
-                var dialog=new ContentDialog
-                {
-                    XamlRoot=Content.XamlRoot,RequestedTheme=ElementTheme.Dark,Title="保存菜单修改？",
-                    Content="当前菜单有未保存的修改。",
-                    PrimaryButtonText="保存并退出",SecondaryButtonText="放弃并退出",CloseButtonText="继续编辑",
-                    DefaultButton=ContentDialogButton.Primary
-                };
-                var result=await dialog.ShowAsync();
-                if(result==ContentDialogResult.None)return;
-                if(result==ContentDialogResult.Primary)await editor.SaveDraftAsync();
-            }
+            if(!await editor.ConfirmPendingChangesAsync("退出"))return;
             closeApproved=true;Close();
         }
         catch(Exception ex){ShowHomeStatus("退出失败",ex.Message,InfoBarSeverity.Error);}
@@ -137,7 +129,7 @@ public sealed partial class MainWindow
             var configuration=await ImportConfigurationAsync();if(configuration is null)return;
             var dialog=new ContentDialog
             {
-                XamlRoot=Content.XamlRoot,RequestedTheme=ElementTheme.Dark,Title="还原配置？",
+                XamlRoot=ConfigurationDialogRoot,RequestedTheme=ElementTheme.Dark,Title="还原配置？",
                 Content=$"将使用备份中的 {configuration.Profiles.Count} 个菜单替换现有全部配置。当前未保存的编辑也会被替换，还原后立即生效。",
                 PrimaryButtonText="还原配置",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close
             };
@@ -155,13 +147,13 @@ public sealed partial class MainWindow
     private async Task RunHomeOperationAsync(Func<Task> operation)
     {
         if(homeOperation||closeDialogOpen||editor.HasOpenDialog||!editor.IsEnabled)return;
-        homeOperation=true;BackupButton.IsEnabled=RestoreButton.IsEnabled=false;editor.IsEnabled=false;editor.StopRecording();
+        homeOperation=true;if(settingsRoot is not null)settingsRoot.IsEnabled=false;BackupButton.IsEnabled=RestoreButton.IsEnabled=false;editor.IsEnabled=false;editor.StopRecording();
         try{await operation();}
         catch(Exception ex){ShowHomeStatus("配置操作失败",ex.Message,InfoBarSeverity.Error);}
-        finally{homeOperation=false;BackupButton.IsEnabled=RestoreButton.IsEnabled=true;editor.IsEnabled=true;}
+        finally{homeOperation=false;if(settingsRoot is not null)settingsRoot.IsEnabled=true;BackupButton.IsEnabled=RestoreButton.IsEnabled=true;editor.IsEnabled=true;}
     }
     private void ShowHomeStatus(string title,string message,InfoBarSeverity severity)
     {
-        StatusBar.Title=title;StatusBar.Message=message;StatusBar.Severity=severity;StatusBar.IsOpen=true;
+        editor.Notify(message,severity,title);
     }
 }
