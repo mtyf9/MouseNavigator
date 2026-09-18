@@ -8,6 +8,13 @@ namespace MouseNavigator.Core;
 
 public static class ConfigurationCodec
 {
+    public static void ValidateTrigger(TriggerSettings value)
+    {
+        if(!Enum.IsDefined(value.Mode)||!Enum.IsDefined(value.Device)||value.HoldMilliseconds is < 100 or > 2000)
+            throw new ArgumentException("触发设置无效。");
+        if(value.Device==TriggerDevice.Keyboard&&(!ShortcutKeys.MainKeys.ContainsKey(value.Key)||value.Key==27))
+            throw new ArgumentException("请选择普通键盘键，Esc 保留用于取消。");
+    }
     public const int MaximumBytes = 16 * 1024 * 1024;
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -51,6 +58,7 @@ public static class ConfigurationCodec
                 throw new ArgumentException("自定义快捷键名称或标识无效，或标识重复。");
             ShortcutKeys.Validate(shortcut.Keys);
         }
+        ValidateTrigger(configuration.Trigger??new());
         var folders=configuration.PresetFolders??[];
         if(folders.Count>100||folders.Any(f=>f is null||!ValidId(f.Id)||string.IsNullOrWhiteSpace(f.Name)||f.Name.Length>80)||folders.Select(f=>f.Id).Distinct().Count()!=folders.Count||folders.GroupBy(f=>f.ParentId).Any(g=>g.Select(f=>f.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=g.Count()))throw new ArgumentException("预设文件夹无效或重复。");
         var folderMap=folders.ToDictionary(f=>f.Id);

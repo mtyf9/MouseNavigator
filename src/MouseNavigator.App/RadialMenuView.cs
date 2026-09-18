@@ -16,6 +16,7 @@ internal sealed record MenuButtonVisual(string Id, string Label, string Glyph, A
 /// <summary>The editor and floating window share geometry, appearance and center content.</summary>
 internal sealed class RadialMenuView : UserControl
 {
+    internal string ExecuteHint {get;set;}="松开执行";
     internal const string CenterButtonId = "$center";
     private readonly Canvas canvas = new() { Background = new SolidColorBrush(Colors.Transparent) };
     private readonly Canvas backdrop = new() { IsHitTestVisible = false };
@@ -223,7 +224,7 @@ internal sealed class RadialMenuView : UserControl
         Contrast(centerContent,(SolidColorBrush)centerDisk.Fill);
         foreach (var (key, tile) in tiles){var fill=StateBrush(key==id);tile.Sector.Fill=fill;Contrast(tile.Panel,fill);}
         var selected = Buttons.FirstOrDefault(b => b.Id == id);
-        center.Text = menu.CenterText ?? (IsEditor && id == CenterButtonId ? "松开执行" : selected is null ? "取消" : selected.Interaction == ActionInteraction.WindowPreview ? "进入预览" : "松开执行");
+        center.Text = menu.CenterText ?? (IsEditor && id == CenterButtonId ? "松开执行" : selected is null ? "取消" : selected.Interaction == ActionInteraction.WindowPreview ? "进入预览" : ExecuteHint);
         center.Visibility = center.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
     private PathGeometry Wedge(Pose p)

@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using MouseNavigator.Contracts;
 using Microsoft.UI.Xaml.Controls;
 namespace MouseNavigator.App;
 internal sealed partial class MenuEditor
@@ -23,9 +24,18 @@ internal sealed partial class MenuEditor
         catch(Exception ex){Notify("保存失败，已保留编辑："+ex.Message,InfoBarSeverity.Error);return false;}
         finally{dialogOpen=false;}
     }
+    internal TriggerSettings CurrentTrigger=>saved.Trigger??new();
+    internal async Task SaveTriggerAsync(TriggerSettings value)
+    {
+        MouseNavigator.Core.ConfigurationCodec.ValidateTrigger(value);
+        var next=saved with{Trigger=value};
+        if(SaveRequested is null)throw new InvalidOperationException("配置保存服务不可用。");
+        await SaveRequested(next);saved=next;draft.SetTrigger(value);
+        Notify("触发设置已保存并生效。",InfoBarSeverity.Success);
+    }
     internal async Task ResetMenusAsync()
     {
-        var reset=DefaultProfiles.Configuration() with{Presets=draft.Presets.ToArray(),PresetFolders=draft.PresetFolders.ToArray(),PresetOrder=draft.PresetOrder.ToArray()};
+        var reset=DefaultProfiles.Configuration() with{Presets=draft.Presets.ToArray(),PresetFolders=draft.PresetFolders.ToArray(),PresetOrder=draft.PresetOrder.ToArray(),Trigger=CurrentTrigger};
         if(SaveRequested is null)throw new InvalidOperationException("配置保存服务不可用。");
         await SaveRequested(reset);saved=reset;Load(reset,false);
     }

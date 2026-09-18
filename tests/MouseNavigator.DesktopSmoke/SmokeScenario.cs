@@ -17,6 +17,11 @@ internal static class SmokeScenario
         Directory.CreateDirectory(directory);
         try
         {
+            if(Environment.GetCommandLineArgs().Contains("--trigger-check"))
+            {
+                var focusedResults=new List<string>();await main.CheckTriggerAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
             if(Environment.GetCommandLineArgs().Contains("--maximize-check"))
             {
                 var focusedResults=new List<string>();await main.CheckMaximizeAsync(focusedResults);

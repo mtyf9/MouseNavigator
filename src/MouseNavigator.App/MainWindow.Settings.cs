@@ -14,8 +14,9 @@ public sealed partial class MainWindow
         if(homeOperation||closeDialogOpen||editor.HasOpenDialog)return;
         var window=new Window{Title="MouseNavigator 设置",SystemBackdrop=new MicaBackdrop()};
         var root=new UserControl{Padding=new Thickness(24),RequestedTheme=ElementTheme.Dark};
-        var body=new StackPanel{Spacing=16};
+        var body=new StackPanel{Spacing=16,Margin=new Thickness(24)};
         body.Children.Add(new TextBlock{Text="设置",FontSize=28});
+        body.Children.Add(CreateTriggerSettings());
         body.Children.Add(new TextBlock{Text="配置备份",FontSize=20});
         body.Children.Add(new TextBlock{Text="备份包含全部菜单、预设按钮、图标和宏。",TextWrapping=TextWrapping.Wrap});
         var backups=new StackPanel{Orientation=Orientation.Horizontal,Spacing=12};
@@ -39,7 +40,8 @@ public sealed partial class MainWindow
         window.AppWindow.Resize(new((int)(560*scale),(int)(480*scale)));
         window.AppWindow.Move(new(AppWindow.Position.X+60,AppWindow.Position.Y+60));
         window.AppWindow.Closing+=(_,e)=>{if(homeOperation)e.Cancel=true;};
-        window.Closed+=(_,_)=>{settingsWindow=null;settingsRoot=null;};
+        window.Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)StopTriggerRecording();};
+        window.Closed+=(_,_)=>{StopTriggerRecording();settingsWindow=null;settingsRoot=null;};
         window.Activate();
     }
 }

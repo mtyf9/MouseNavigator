@@ -10,6 +10,7 @@ internal sealed class RingWindow : Window
 {
     private readonly RadialMenuView surface = new();
     private readonly nint hwnd;
+    public nint Handle=>hwnd;
     private OverlayPlacement placement;
     private double sizeScale = 1;
     public RingWindow()
@@ -25,8 +26,9 @@ internal sealed class RingWindow : Window
         AppWindow.IsShownInSwitchers = false;
         OverlayWindow.Configure(hwnd);
     }
-    public void SetMenu(MenuProfile menu, ActionRegistry registry)
+    public void SetMenu(MenuProfile menu, ActionRegistry registry,bool clickTrigger=false)
     {
+        surface.ExecuteHint=clickTrigger?"左键或点按执行":"松开执行";
         sizeScale = menu.SizeScale;
         surface.SetMenu(menu, id => registry.Find(id)?.Descriptor);
     }
@@ -36,6 +38,7 @@ internal sealed class RingWindow : Window
         placement = OverlayWindow.Show(hwnd, x, y, surface.Diameter * sizeScale);
         placement = placement with { Scale = placement.Scale * sizeScale };
     }
+    public bool ContainsPoint(int x,int y)=>Math.Pow(x-placement.CenterX,2)+Math.Pow(y-placement.CenterY,2)<=Math.Pow(surface.Diameter*placement.Scale/2,2);
     public string? HitTest(int x, int y) => surface.HitTest((x - placement.CenterX) / placement.Scale, (y - placement.CenterY) / placement.Scale);
     public void HideRing() => OverlayWindow.Hide(hwnd);
     public void Highlight(string? selected) => surface.Highlight(selected);

@@ -515,6 +515,19 @@ Add("Blank preset stays pinned and cannot enter folders",()=>{
     Equal("builtin-b,builtin-a",string.Join(",",draft.PresetOrder));
     Equal(0,draft.Presets.Count);
 });
+Add("Trigger configuration validates and survives editing and reload",()=>{
+    foreach(var device in Enum.GetValues<TriggerDevice>())
+    foreach(var mode in Enum.GetValues<TriggerMode>())
+    {
+        var trigger=new TriggerSettings(mode,device,119,350);
+        var draft=new ConfigurationDraft(Config() with{Trigger=trigger});
+        var result=ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot()));
+        Equal(trigger,result.Trigger);
+    }
+    Throws(()=>ConfigurationCodec.ValidateTrigger(new(Device:TriggerDevice.Keyboard,Key:27)));
+    Throws(()=>ConfigurationCodec.ValidateTrigger(new(HoldMilliseconds:0)));
+    Equal(new TriggerSettings(),new ConfigurationDraft(Config()).Snapshot().Trigger);
+});
 if(args.Length>0)tests=tests.Where(t=>t.Name.Contains(args[0],StringComparison.OrdinalIgnoreCase)).ToList();
 var failed = 0;
 foreach (var (name, run) in tests)

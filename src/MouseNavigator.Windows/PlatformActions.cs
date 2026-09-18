@@ -67,6 +67,14 @@ public sealed class PlatformActions(IWindowCatalog catalog) : IPlatformActions
         Type = 1,
         Value = new() { Keyboard = new() { Key = key, Flags = (up ? 2u : 0u) | (key is >= 0x21 and <= 0x28 or 0x2D or 0x2E or 0x5B or 0x5C or >= 0xAD and <= 0xB3 ? 1u : 0u) } }
     };
+    public static bool ReplayTrigger(TriggerSettings trigger)
+    {
+        if(trigger.Device==TriggerDevice.MiddleMouse)return ReplayMiddleClick();
+        Input[] inputs=trigger.Device==TriggerDevice.Keyboard?[Key(trigger.Key,false),Key(trigger.Key,true)]:
+            [new(){Value=new(){Mouse=new(){Flags=0x80,Data=trigger.Device==TriggerDevice.MouseX1?1u:2u}}},
+             new(){Value=new(){Mouse=new(){Flags=0x100,Data=trigger.Device==TriggerDevice.MouseX1?1u:2u}}}];
+        return SendInput(2,inputs,Marshal.SizeOf<Input>())==2;
+    }
     public static bool ReplayMiddleClick()
     {
         Input[] inputs = [new() { Value = new() { Mouse = new() { Flags = 0x20 } } }, new() { Value = new() { Mouse = new() { Flags = 0x40 } } }];

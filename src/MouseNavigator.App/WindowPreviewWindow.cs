@@ -14,6 +14,7 @@ internal sealed partial class WindowPreviewWindow : Window
 {
     private readonly Canvas canvas = new();
     private readonly nint hwnd;
+    public nint Handle=>hwnd;
     private readonly Dictionary<int, Border> cards = [];
     private readonly Dictionary<int, TextBlock> statuses = [];
     private readonly Dictionary<int, StackPanel> fallbacks = [];
@@ -22,7 +23,7 @@ internal sealed partial class WindowPreviewWindow : Window
     private OverlayPanelPlacement placement;
     private TextBlock? previous, next, hint;
     private WindowPreviewAppearance appearance=new();
-    private bool armed;
+    private bool armed,clickTrigger;
     private int openingX, openingY, lastX, lastY, pageDirection;
     private long pageAfter;
     public bool IsOpen { get; private set; }
@@ -43,9 +44,9 @@ internal sealed partial class WindowPreviewWindow : Window
         AppWindow.IsShownInSwitchers = false;
         OverlayWindow.Configure(hwnd);
     }
-    public void ShowAt(int x, int y, IReadOnlyList<WindowCandidate> windows,WindowPreviewAppearance? appearance=null)
+    public void ShowAt(int x, int y, IReadOnlyList<WindowCandidate> windows,WindowPreviewAppearance? appearance=null,bool clickTrigger=false)
     {
-        HidePreview();this.appearance=appearance??new();
+        HidePreview();this.clickTrigger=clickTrigger;this.appearance=appearance??new();
         canvas.Background=PreviewPalette.Background(this.appearance);
         placement = OverlayWindow.PanelPlacement(x, y, windows.Count);
         session = new(windows, new WindowPreviewLayout(placement.Width, placement.Height, windows.Count));
@@ -65,7 +66,7 @@ internal sealed partial class WindowPreviewWindow : Window
         var layout = session.Layout;
         canvas.Width = layout.Width; canvas.Height = layout.Height;
         Place(new TextBlock { Text = "窗口预览", FontSize = 23, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new(20, 14, 180, 32));
-        hint = new TextBlock { Text = "保持按住中键 · 移到窗口后松开切换 · Esc 取消", FontSize = 12, Opacity = 0.7 };
+        hint = new TextBlock { Text = (clickTrigger?"移动到目标窗口 · 左键或触发键切换 · Esc 取消":"保持按住触发键 · 移到窗口后松开切换 · Esc 取消"), FontSize = 12, Opacity = 0.7 };
         Place(hint, new(20, 46, layout.Width - 40, 22));
         foreach (var (index, window) in session.Visible)
         {
@@ -92,7 +93,7 @@ internal sealed partial class WindowPreviewWindow : Window
             }
         }
         if (session.Windows.Count == 0)
-            Place(new TextBlock { Text = "当前桌面没有可预览的窗口\n在空白处松开中键即可返回", TextAlignment = TextAlignment.Center,
+            Place(new TextBlock { Text = "当前桌面没有可预览的窗口\n在空白处松开触发键即可返回", TextAlignment = TextAlignment.Center,
                 TextWrapping = TextWrapping.Wrap, FontSize = 18, VerticalAlignment = VerticalAlignment.Center },
                 new(24, 110, layout.Width - 48, layout.Height - 210));
         previous = new TextBlock { Text = "‹  停留上一页", FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
@@ -110,6 +111,7 @@ internal sealed partial class WindowPreviewWindow : Window
         Canvas.SetLeft(element, rect.X); Canvas.SetTop(element, rect.Y);
         canvas.Children.Add(element);
     }
+    public bool ContainsPoint(int x,int y)=>IsOpen&&x>=placement.Left&&y>=placement.Top&&x<placement.Left+placement.Width*placement.Scale&&y<placement.Top+placement.Height*placement.Scale;
     public void MovePointer(int x, int y)
     {
         if (!IsOpen || session is null) return;
@@ -124,6 +126,7 @@ internal sealed partial class WindowPreviewWindow : Window
             : session.Layout.Next.Contains(localX, localY) && session.Page + 1 < session.PageCount ? 1 : 0;
         if (direction != pageDirection) { pageDirection = direction; pageAfter = Environment.TickCount64 + 650; }
     }
+    public WindowCandidate? ClickSelectionAt(int x,int y)=>session?.HitTest((x-placement.Left)/placement.Scale,(y-placement.Top)/placement.Scale);
     public WindowCandidate? SelectionAt(int x, int y) => !armed || session is null ? null
         : session.HitTest((x - placement.Left) / placement.Scale, (y - placement.Top) / placement.Scale);
     public void RefreshAvailable(IReadOnlyList<WindowCandidate> current)
@@ -160,7 +163,7 @@ internal sealed partial class WindowPreviewWindow : Window
         if (previous is not null) previous.Opacity = session.Page > 0 ? 0.9 : 0.25;
         if (next is not null) next.Opacity = session.Page + 1 < session.PageCount ? 0.9 : 0.25;
         if(editingAppearance){if(hint is not null)hint.Text="移动鼠标试览高亮 · 右侧调整外观";return;}
-        if (hint is not null) hint.Text = selected is null ? "保持按住中键 · 移到窗口后松开切换 · Esc 取消" : "松开中键切换到选中窗口";
+        if (hint is not null) hint.Text = selected is null ? (clickTrigger?"移动到目标窗口 · 左键或触发键切换 · Esc 取消":"保持按住触发键 · 移到窗口后松开切换 · Esc 取消") : (clickTrigger?"左键点击或再次点按触发键切换":"松开触发键切换到选中窗口");
     }
     private void UpdateThumbnails()
     {

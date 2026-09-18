@@ -65,6 +65,7 @@ public sealed partial class MainWindow : Window
         try
         {
             controller = new NavigationController(DispatcherQueue, catalog, registry, resolver, platform.ActivateWindow);
+            controller.ConfigureTrigger(loaded.Configuration.Trigger??new());
             controller.ContextChanged += text => ContextText.Text = text;
             controller.Completed += result =>
             {
@@ -114,6 +115,7 @@ public sealed partial class MainWindow : Window
         var updatedResolver = new ProfileResolver(configuration.Profiles);
         await Task.Run(() => store.Save(configuration));
         controller?.ApplyConfiguration(updatedRegistry, updatedResolver);
+        controller?.ConfigureTrigger(configuration.Trigger??new());
         registry = updatedRegistry;
 
         ContextText.Text = "配置已更新，等待下一次导航";

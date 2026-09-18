@@ -11,6 +11,8 @@ public sealed class ConfigurationDraft
     private readonly List<PresetFolder> folders;
     private readonly List<string> presetOrder;
     private readonly bool builtInMenusInitialized;
+    private TriggerSettings trigger=new();
+    public void SetTrigger(TriggerSettings value){ConfigurationCodec.ValidateTrigger(value);trigger=value;}
     public IReadOnlyList<string> PresetOrder => presetOrder;
     public void ReorderPresets(IReadOnlyList<string> visibleIds,string sourceId,string? beforeId)
     {
@@ -59,7 +61,7 @@ public sealed class ConfigurationDraft
     public ConfigurationDraft(NavigatorConfiguration configuration)
     {
         var copy = ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(configuration));
-        builtInMenusInitialized=copy.BuiltInMenusInitialized;profiles = copy.Profiles.ToList();presetOrder=(copy.PresetOrder??[]).ToList();
+        trigger=copy.Trigger??new();builtInMenusInitialized=copy.BuiltInMenusInitialized;profiles = copy.Profiles.ToList();presetOrder=(copy.PresetOrder??[]).ToList();
         folders=(copy.PresetFolders??[]).ToList();shortcuts = copy.Shortcuts.ToList(); presets = (copy.Presets ?? []).ToList();
     }
     public MenuProfile Find(string id) => profiles.Single(p => p.Id == id);
@@ -259,7 +261,7 @@ public sealed class ConfigurationDraft
         profiles[profiles.IndexOf(profile)] = MultiRingLayout.AlignChangedCounts(profile, profile with { Entries = entries.ToArray() });
     public NavigatorConfiguration Snapshot()
     {
-        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray(),folders.ToArray(),presetOrder.ToArray(),builtInMenusInitialized);
+        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray(),folders.ToArray(),presetOrder.ToArray(),builtInMenusInitialized,trigger);
         ConfigurationCodec.Validate(result);
         return result;
     }
