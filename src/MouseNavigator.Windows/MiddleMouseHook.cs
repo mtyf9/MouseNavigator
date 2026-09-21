@@ -23,7 +23,17 @@ public sealed class MiddleMouseHook : IDisposable
     public void Configure(TriggerSettings value)=>Volatile.Write(ref settings,value);
     private uint threadId;
     private Exception? startupError;
-    private bool held,leftHeld;
+    private bool held,leftHeld,blockedKeyboardHeld;
+    private string[] blockedApplications=[];
+    public void ConfigureBlockedApplications(IReadOnlyList<string> names)=>Volatile.Write(ref blockedApplications,names.Select(n=>n.Trim().EndsWith(".exe",StringComparison.OrdinalIgnoreCase)?n.Trim()[..^4]:n.Trim()).ToArray());
+    private bool IsBlockedAt(int x,int y)
+    {
+        var names=Volatile.Read(ref blockedApplications);if(names.Length==0)return false;
+        var hwnd=WindowCatalog.WindowAt(x,y);if(hwnd==0)hwnd=GetForegroundWindow();
+        GetWindowThreadProcessId(hwnd,out var pid);
+        try{using var process=System.Diagnostics.Process.GetProcessById((int)pid);return names.Contains(process.ProcessName,StringComparer.OrdinalIgnoreCase);}
+        catch{return false;}
+    }
     private nint clickWindow;
     public nint ClickWindow{get=>Interlocked.CompareExchange(ref clickWindow,0,0);set=>Interlocked.Exchange(ref clickWindow,value);}
     private volatile bool enabled = true;
@@ -89,7 +99,7 @@ public sealed class MiddleMouseHook : IDisposable
                 Publish(MousePhase.PointerDown,sample.Point.X,sample.Point.Y);
             if(Matches(target))
             {
-                if((id is 0x207 or 0x20B)&&enabled&&!held&&(tracking||MayBegin(sample.Point.X,sample.Point.Y)))
+                if((id is 0x207 or 0x20B)&&enabled&&!held&&!IsBlockedAt(sample.Point.X,sample.Point.Y))
                 {held=true;pressed=configured;Publish(MousePhase.Down,sample.Point.X,sample.Point.Y);return 1;}
                 if((id is 0x208 or 0x20C)&&held)
                 {held=false;pressed=null;Publish(enabled?MousePhase.Up:MousePhase.Cancel,sample.Point.X,sample.Point.Y);return 1;}
@@ -103,11 +113,6 @@ public sealed class MiddleMouseHook : IDisposable
         return CallNextHookEx(hook, code, message, data);
     }
 
-    private static bool MayBegin(int x,int y)
-    {
-        GetWindowThreadProcessId(WindowCatalog.WindowAt(x,y),out var pid);
-        return pid!=Environment.ProcessId;
-    }
     private void Publish(MousePhase phase,int x,int y)=>Input?.Invoke(new(phase,x,y,
         phase==MousePhase.Down?GetForegroundWindow():0,phase==MousePhase.Down?WindowCatalog.WindowAt(x,y):0));
     private nint OnKeyboard(int code,nint message,nint data)
@@ -119,12 +124,20 @@ public sealed class MiddleMouseHook : IDisposable
             var configured=Volatile.Read(ref settings);var target=pressed??configured;
             if((key.Flags&0x10)!=0||target.Device!=TriggerDevice.Keyboard||key.Key!=target.Key)
                 return CallNextHookEx(keyboardHook,code,message,data);
+            if(blockedKeyboardHeld)
+            {
+                if(id is 0x101 or 0x105)blockedKeyboardHeld=false;
+                return CallNextHookEx(keyboardHook,code,message,data);
+            }
             if(id is 0x100 or 0x104)
             {
                 if(held)return 1;
-                GetCursorPos(out var cursor);
-                if(enabled&&(tracking||MayBegin(cursor.X,cursor.Y)))
-                {held=true;pressed=configured;GetCursorPos(out var p);Publish(MousePhase.Down,p.X,p.Y);return 1;}
+                if(enabled)
+                {
+                    GetCursorPos(out var p);
+                    if(IsBlockedAt(p.X,p.Y)){blockedKeyboardHeld=true;return CallNextHookEx(keyboardHook,code,message,data);}
+                    held=true;pressed=configured;Publish(MousePhase.Down,p.X,p.Y);return 1;
+                }
             }
             else if(id is 0x101 or 0x105 && held)
             {held=false;pressed=null;GetCursorPos(out var p);Publish(enabled?MousePhase.Up:MousePhase.Cancel,p.X,p.Y);return 1;}
