@@ -17,7 +17,7 @@ internal sealed partial class MenuEditor
             var folder=draft.PresetFolders.FirstOrDefault(f=>f.Id==id);if(folder is null)break;
             names.Insert(0,folder.Name);id=folder.ParentId;
         }
-        return string.Join(" / ",names);
+        return "预设按钮 / "+string.Join(" / ",names);
     }
     private void NavigatePresetFolder(string? id)
     {
@@ -32,7 +32,7 @@ internal sealed partial class MenuEditor
     {
         if(currentPresetFolder is not null&&!currentPresetFolder.StartsWith("$")&&!draft.PresetFolders.Any(f=>f.Id==currentPresetFolder))currentPresetFolder=null;
         presetBack.IsEnabled=currentPresetFolder is not null;
-        presetBreadcrumb.Text=currentPresetFolder is null?"预设按钮":currentPresetFolder.StartsWith("$category:")?"内置 / "+currentPresetFolder[10..]:FolderPath(currentPresetFolder);
+        presetBreadcrumb.Visibility=Visibility.Visible;presetBreadcrumb.Text=currentPresetFolder is null?"预设按钮":currentPresetFolder.StartsWith("$category:")?"预设按钮 / "+currentPresetFolder[10..]:FolderPath(currentPresetFolder);
     }
     private void AddFolderCards()
     {

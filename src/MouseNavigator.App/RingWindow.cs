@@ -12,7 +12,7 @@ internal sealed class RingWindow : Window
     private readonly nint hwnd;
     public nint Handle=>hwnd;
     private OverlayPlacement placement;
-    private double sizeScale = 1;
+    private double sizeScale = 1; private bool desktopGlass;
     public RingWindow()
     {
         Title = "MouseNavigator Ring";
@@ -28,6 +28,9 @@ internal sealed class RingWindow : Window
     }
     public void SetMenu(MenuProfile menu, ActionRegistry registry,bool clickTrigger=false)
     {
+        var glass=menu.VisualStyle?.SkinId=="builtin.glass"&&(menu.VisualStyle.GlassOpacity>0);
+        if(glass!=desktopGlass){SystemBackdrop=glass?new OverlayAcrylicBackdrop():new TransparentBackdrop();desktopGlass=glass;}
+        if(SystemBackdrop is OverlayAcrylicBackdrop material)material.SetOpacity(menu.VisualStyle?.GlassOpacity??.18);surface.UseDesktopGlass=menu.VisualStyle?.SkinId=="builtin.glass";
         surface.ExecuteHint=clickTrigger?"左键或点按执行":"松开执行";
         sizeScale = menu.SizeScale;
         surface.SetMenu(menu, id => registry.Find(id)?.Descriptor);
@@ -36,11 +39,11 @@ internal sealed class RingWindow : Window
     {
         Highlight(null);
         placement = OverlayWindow.Show(hwnd, x, y, surface.Diameter * sizeScale);
-        placement = placement with { Scale = placement.Scale * sizeScale };
+        placement = placement with { Scale = placement.Scale * sizeScale };surface.PlayEntrance();
     }
     public bool ContainsPoint(int x,int y)=>Math.Pow(x-placement.CenterX,2)+Math.Pow(y-placement.CenterY,2)<=Math.Pow(surface.Diameter*placement.Scale/2,2);
     public string? HitTest(int x, int y) => surface.HitTest((x - placement.CenterX) / placement.Scale, (y - placement.CenterY) / placement.Scale);
-    public void HideRing() => OverlayWindow.Hide(hwnd);
+    public void HideRing() {surface.StopMotion();OverlayWindow.Hide(hwnd);}
     public void Highlight(string? selected) => surface.Highlight(selected);
 #if DEBUG
     internal RadialMenuView ViewForSmoke => surface;

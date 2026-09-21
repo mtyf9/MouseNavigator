@@ -43,7 +43,7 @@ internal sealed class NavigationController : IDisposable
         ring = new RingWindow();
         try { hook = new MiddleMouseHook(); }
         catch { ring.Close(); throw; }
-        hook.Input += OnInput;
+        hook.ConfigureBlockedApplications(resolver.BlockedApplications);hook.Input += OnInput;
         escapeTimer = dispatcher.CreateTimer();
         escapeTimer.Interval = TimeSpan.FromMilliseconds(80);
         escapeTimer.Tick += (_, _) =>
@@ -83,7 +83,7 @@ internal sealed class NavigationController : IDisposable
         Cancel();
         while (queue.TryDequeue(out _)) { }
         registry = updatedRegistry;
-        resolver = updatedResolver;
+        resolver = updatedResolver;hook.ConfigureBlockedApplications(updatedResolver.BlockedApplications);
     }
     private void OnInput(MouseSample sample)
     {
@@ -134,7 +134,7 @@ internal sealed class NavigationController : IDisposable
             originX=pointerX=sample.X;originY=pointerY=sample.Y;
             scale = OverlayWindow.ScaleAt(sample.X, sample.Y);
             context = catalog.Capture(sample.PointerWindow!=0?sample.PointerWindow:sample.Foreground);
-            menu = resolver.Resolve(context);
+            if(resolver.IsBlocked(context)){Cancel();return;}menu = resolver.Resolve(context);
             if (!menu.Enabled) return; // Keep the held click until Up so ordinary middle clicks still replay.
             hasInteractiveAction = menu.Entries.Any(e => registry.Find(e.ActionId)?.Descriptor.Interaction == ActionInteraction.WindowPreview);
             ring.SetMenu(menu, registry,trigger.Mode==TriggerMode.Toggle);
@@ -221,7 +221,7 @@ internal sealed class NavigationController : IDisposable
     {
         pendingPreview=null;
         preview ??= new WindowPreviewWindow();
-        preview.ShowAt(x,y,catalog.Enumerate(),menu?.PreviewAppearance,trigger.Mode==TriggerMode.Toggle);previewRefreshAt=Environment.TickCount64+300;
+        preview.ShowAt(x,y,catalog.Enumerate(),menu is null?null:PreviewStyle.Resolve(menu),trigger.Mode==TriggerMode.Toggle);previewRefreshAt=Environment.TickCount64+300;
         hook.ClickWindow=preview.Handle;ring.HideRing();visible=false;
     }
     private void Cancel() { hook.ClickWindow=0;hook.Tracking=false;pendingPreview=null; active = false; visible = false; ring.HideRing(); preview?.HidePreview(); }

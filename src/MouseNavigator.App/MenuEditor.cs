@@ -21,9 +21,9 @@ internal sealed partial class MenuEditor : UserControl
     private readonly TextBlock matchWarning=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Opacity=0.75};
     private readonly StackPanel actionChoices=new(){Spacing=6};
     private readonly TextBox buttonName=new(){Header="名称",MaxLength=80,PlaceholderText="留空使用动作名称"};
-    private readonly Button iconPicker=new(){HorizontalAlignment=HorizontalAlignment.Stretch};
+    private readonly Button iconPicker=new(){HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Left};
     private readonly Button savePreset=new(){Width=48,Height=48,HorizontalAlignment=HorizontalAlignment.Center};
-    private readonly StackPanel properties=new(){Spacing=12};
+    private ScrollViewer? buttonConfigurationScroll; private Action<bool>? buttonPageChanged; private readonly StackPanel properties=new(){Spacing=12};
     private readonly TextBox presetSearch=new(){PlaceholderText="搜索预设按钮",Margin=new Thickness(0,6,0,8)};
     private readonly StackPanel presetCards=new(){Spacing=8};
     private readonly RadialMenuView preview=new(){IsEditor=true};
@@ -50,7 +50,7 @@ internal sealed partial class MenuEditor : UserControl
     private readonly Button record=new(){Content="录入快捷键",HorizontalAlignment=HorizontalAlignment.Stretch};
     private readonly TextBlock chord=new(){FontSize=16,TextWrapping=TextWrapping.Wrap};
     public Func<NavigatorConfiguration,Task>? SaveRequested {get;set;}
-    public Func<Task<string?>>? PickImageRequested {get;set;}
+    public Func<Task<string?>>? PickBackgroundRequested {get;set;} public Func<Task<string?>>? PickImageRequested {get;set;}
     public Func<Task<IReadOnlyList<string>>>? PickProgramsRequested {get;set;}
     public Func<Task<MenuDocument?>>? ImportMenuRequested {get;set;}
     public Func<MenuDocument,Task>? ExportMenuRequested {get;set;}
@@ -83,7 +83,7 @@ internal sealed partial class MenuEditor : UserControl
         saveTools.Children.Add(MakeButton("导入菜单",async(_,_)=>await RunAsync(ImportSingleMenuAsync)));
         saveTools.Children.Add(MakeButton("导出菜单",async(_,_)=>await RunAsync(async()=>{if(ExportMenuRequested is not null)await ExportMenuRequested(draft.ExportMenu(profileId));})));
         menuTools.Children.Add(saveTools);
-        menuTools.Children.Add(MakeButton("设置",(_,_)=>OpenSettingsRequested?.Invoke()));
+
         var matching=new StackPanel{Spacing=6};
         var matchHeading=new StackPanel{Orientation=Orientation.Horizontal,Spacing=20};
         matchHeading.Children.Add(new TextBlock{Text="应用匹配",FontSize=17,VerticalAlignment=VerticalAlignment.Center});matchHeading.Children.Add(globalDefault);
@@ -92,23 +92,24 @@ internal sealed partial class MenuEditor : UserControl
         matches.Children.Add(matchHeading);matches.Children.Add(processes);chooseProgram.VerticalAlignment=VerticalAlignment.Bottom;matches.Children.Add(chooseProgram);matches.Children.Add(new TextBlock{Text="优先级",VerticalAlignment=VerticalAlignment.Center});matches.Children.Add(priority);
         matching.Children.Add(matches);matching.Children.Add(matchWarning);root.Children.Add(matching);
         var editor=new Grid {ColumnSpacing=12};
-        editor.ColumnDefinitions.Add(new(){Width=new GridLength(236)});
+        editor.ColumnDefinitions.Add(new(){Width=new GridLength(290)});
         editor.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        editor.ColumnDefinitions.Add(new(){Width=new GridLength(236)});
+        editor.ColumnDefinitions.Add(new(){Width=new GridLength(290)});
         var library=new Grid{RowSpacing=10};
         library.RowDefinitions.Add(new(){Height=GridLength.Auto});
-        library.RowDefinitions.Add(new(){Height=GridLength.Auto});
         library.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
-        library.Children.Add(new TextBlock {Text="预设按钮",FontSize=18,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
+
         var libraryHint=new TextBlock {Text="拖入菜单后独立配置",FontSize=12,Opacity=0.65,TextWrapping=TextWrapping.Wrap};
-        var searchArea=new StackPanel();searchArea.Children.Add(libraryHint);searchArea.Children.Add(presetSearch);searchArea.Children.Add(presetBreadcrumb);
+        var searchArea=new StackPanel();searchArea.Children.Add(libraryHint);searchArea.Children.Add(presetSearch);
         var folderTools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6};
-        folderTools.Children.Add(presetBack);folderTools.Children.Add(MakeButton("新建文件夹",async(_,_)=>await CreatePresetFolderAsync()));searchArea.Children.Add(folderTools);
-        Grid.SetRow(searchArea,1);library.Children.Add(searchArea);presetSearch.TextChanged+=(_,_)=>{if(!presetNavigationPending)RefreshPresets();};
-        presetScroll.Content=presetCards;
-        Grid.SetRow(presetScroll,2);library.Children.Add(presetScroll);
-        var libraryCard=new Border{Background=panelThemeBrush,CornerRadius=new CornerRadius(14),Padding=new Thickness(14),Child=library,Height=400,VerticalAlignment=VerticalAlignment.Top};
-        editor.Children.Add(libraryCard);
+        folderTools.Children.Add(presetBack);folderTools.Children.Add(MakeButton("新建文件夹",async(_,_)=>await CreatePresetFolderAsync()));
+        Grid.SetRow(searchArea,0);library.Children.Add(searchArea);presetSearch.TextChanged+=(_,_)=>{if(!presetNavigationPending)RefreshPresets();};
+        presetBack.Padding=new Thickness(8,6,8,6);
+        foreach(var tool in folderTools.Children.OfType<Button>()){tool.Padding=new Thickness(8,6,8,6);tool.FontSize=12;tool.HorizontalContentAlignment=HorizontalAlignment.Left;}
+        var presetHost=SidebarScroll(new StackPanel{Spacing=10,Children={presetBreadcrumb,folderTools,presetCards}},presetScroll);
+        Grid.SetRow(presetHost,1);library.Children.Add(presetHost);
+        var libraryCard=new Border{Background=panelThemeBrush,CornerRadius=new CornerRadius(14),Padding=new Thickness(18),Child=library,Height=400,VerticalAlignment=VerticalAlignment.Top};
+
         var designer=new StackPanel {Spacing=10,VerticalAlignment=VerticalAlignment.Top};
         var circleTools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Bottom,Margin=new Thickness(0,0,0,28)};
         circleTools.Children.Add(rings);
@@ -127,17 +128,6 @@ internal sealed partial class MenuEditor : UserControl
         Grid.SetRow(previewScroll,1);previewArea.Children.Add(previewScroll);
         previewArea.Children.Add(RotationArea(-1));
         previewArea.Children.Add(RotationArea(1));
-        var appearanceTools=new Grid{MaxWidth=720,Margin=new Thickness(90,0,90,0),ColumnSpacing=12,VerticalAlignment=VerticalAlignment.Top,HorizontalAlignment=HorizontalAlignment.Stretch};
-        appearanceTools.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        appearanceTools.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        appearanceTools.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        var sizeTools=new StackPanel{Spacing=2};sizeDescription.FontSize=11;
-        sizeTools.Children.Add(menuSize);sizeTools.Children.Add(sizeDescription);appearanceTools.Children.Add(sizeTools);
-        Grid.SetColumn(buttonGap,2);appearanceTools.Children.Add(buttonGap);
-        var colors=new StackPanel{Spacing=6};
-        colors.Children.Add(MakeButton("悬浮窗颜色",async(_,_)=>await ChooseMenuColorAsync()));
-
-        Grid.SetColumn(colors,1);appearanceTools.Children.Add(colors);previewArea.Children.Add(appearanceTools);
         Grid.SetRow(circleTools,2);previewArea.Children.Add(circleTools);
         var saveArea=new StackPanel{Width=96,Spacing=4,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Bottom,Margin=new Thickness(4)};
         savePreset.Content=ButtonIcons.Create("\uE74E",null,20);saveArea.Children.Add(savePreset);
@@ -154,7 +144,7 @@ internal sealed partial class MenuEditor : UserControl
         centerSettings.Children.Add(imageTools);
         centerSettings.Children.Add(MakeButton("恢复默认中心",(_,_)=>{draft.SetCenterAppearance(profileId,null,null);MarkDirty();RefreshCenterSettings();RefreshPreview();}));
         Grid.SetColumn(designer,1);editor.Children.Add(designer);
-        properties.Children.Add(new TextBlock {Text="配置按钮",FontSize=20,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
+
         properties.Children.Add(buttonName);properties.Children.Add(iconPicker);properties.Children.Add(actionChoices);
         shortcutPanel.Children.Add(shortcutName);shortcutPanel.Children.Add(record);
         var mods=new Grid();mods.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});mods.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
@@ -164,15 +154,36 @@ internal sealed partial class MenuEditor : UserControl
         var manualBody=new StackPanel{Spacing=8};manualBody.Children.Add(mods);manualBody.Children.Add(mainKey);manual.Content=manualBody;
         shortcutPanel.Children.Add(chord);shortcutPanel.Children.Add(manual);
         properties.Children.Add(centerSettings);
-        var card=new Border {Background=panelThemeBrush,CornerRadius=new CornerRadius(14),Padding=new Thickness(14),Child=properties};
-        properties.VerticalAlignment=VerticalAlignment.Top;
-        void SyncLibraryHeight()
+        var propertyScroll=new ScrollViewer{Visibility=Visibility.Collapsed,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
+        var propertyHost=SidebarScroll(properties,propertyScroll);buttonConfigurationScroll=propertyScroll;
+        var tabs=new SlidingTabs("预设","配置");
+        buttonPageChanged=configure=>{configure=configure&&selectedButtonId is not null;
+            library.Visibility=configure?Visibility.Collapsed:Visibility.Visible;
+            propertyScroll.Visibility=configure?Visibility.Visible:Visibility.Collapsed;
+            tabs.SelectedIndex=configure?1:0;
+        };
+        tabs.SelectionChanged+=index=>buttonPageChanged(index==1);
+        libraryCard.Child=null;
+        var left=new Grid{RowSpacing=10};
+        left.RowDefinitions.Add(new(){Height=GridLength.Auto});left.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
+        left.Children.Add(new StackPanel{Spacing=8,Children={new TextBlock{Text="功能",FontSize=24,FontWeight=Microsoft.UI.Text.FontWeights.Bold},tabs}});Grid.SetRow(library,1);Grid.SetRow(propertyHost,1);left.Children.Add(library);left.Children.Add(propertyHost);
+        libraryCard.Child=left;editor.Children.Add(libraryCard);
+        appearanceLayout.Children.Add(menuSize);appearanceLayout.Children.Add(sizeDescription);appearanceLayout.Children.Add(buttonGap);
+        var rightContent=new StackPanel{Spacing=10,Children={appearanceBody,appearanceLayout}};
+        var rightScroll=new ScrollViewer{HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
+        var rightHost=SidebarScroll(rightContent,rightScroll);var appearanceTabs=new SlidingTabs("背景","按钮","动画","布局","预设");
+        appearanceTabs.SelectionChanged+=index=>{appearancePage=index;RefreshAppearancePage();};
+        var rightGrid=new Grid{RowSpacing=12};
+        rightGrid.RowDefinitions.Add(new(){Height=GridLength.Auto});rightGrid.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
+        rightGrid.Children.Add(new StackPanel{Spacing=8,Children={new TextBlock{Text="外观",FontSize=24,FontWeight=Microsoft.UI.Text.FontWeights.Bold},appearanceTabs}});Grid.SetRow(rightHost,1);rightGrid.Children.Add(rightHost);
+        var right=new Border{Background=panelThemeBrush,CornerRadius=new(14),Padding=new(18),Child=rightGrid,VerticalAlignment=VerticalAlignment.Top};
+        Grid.SetColumn(right,2);editor.Children.Add(right);root.Children.Add(editor);
+        void ResizeSides()
         {
-            var height=Math.Max(designer.ActualHeight,properties.ActualHeight+28);
-            if(height>28&&Math.Abs(libraryCard.Height-height)>0.5)libraryCard.Height=height;
+            var height=Math.Max(360,(XamlRoot?.Size.Height??850)-260);
+            libraryCard.Height=height;right.Height=height;rightScroll.MaxHeight=height-112;
         }
-        designer.SizeChanged+=(_,_)=>SyncLibraryHeight();properties.SizeChanged+=(_,_)=>SyncLibraryHeight();
-        Grid.SetColumn(card,2);editor.Children.Add(card);root.Children.Add(editor);
+        SizeChanged+=(_,_)=>ResizeSides();Loaded+=(_,_)=>ResizeSides();
         root.Children.Add(feedback);
         BuildLaunchControls();PopulateActionChoices();foreach(var pair in ShortcutKeys.MainKeys)mainKey.Items.Add(new ComboBoxItem {Content=pair.Value,Tag=pair.Key});
         profiles.DropDownOpened+=(_,_)=>SetProfileRowTools(true);
@@ -206,15 +217,22 @@ internal sealed partial class MenuEditor : UserControl
         mainKey.SelectionChanged+=(_,_)=>UpdateShortcut();
         record.Click+=(_,_)=>StartRecording();recordingTimeout.Tick+=(_,_)=>StopRecording();
         record.LostFocus+=(_,_)=>StopRecording();
+        foreach(var button in new[]{trash,savePreset})
+        {
+            var background=button==trash?trash.Background:presetThemeBrush;button.Background=background;
+            button.Resources["ButtonBackgroundDisabled"]=background;
+            button.Resources["ButtonBorderBrushDisabled"]=button.BorderBrush??new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            button.Resources["ButtonForegroundDisabled"]=new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255,120,120,120));
+        }
         trash.Click+=async(_,_)=>await RemoveButtonAsync();
         savePreset.Click+=async(_,_)=>await SaveSelectedPresetAsync();
-        preview.ButtonSelected+=id=>{selectedButtonId=id;RefreshButton();};
-        preview.CenterSelected+=()=>{CancelDrag();selectedButtonId=RadialMenuView.CenterButtonId;RefreshButton();};
+        preview.ButtonSelected+=id=>{selectedButtonId=id;RefreshButton();buttonPageChanged?.Invoke(true);};
+        preview.CenterSelected+=()=>{CancelDrag();selectedButtonId=RadialMenuView.CenterButtonId;RefreshButton();buttonPageChanged?.Invoke(true);};
         preview.ButtonPressed+=(id,e)=>BeginDrag(id,null,e);
-        root.PointerMoved+=DragMoved;root.PointerReleased+=DragReleased;root.PointerCaptureLost+=(_,_)=>CancelDrag();root.PointerCanceled+=(_,_)=>CancelDrag();
+        root.Background=new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);root.PointerPressed+=ClearSelectionOnBlank;root.PointerMoved+=DragMoved;root.PointerReleased+=DragReleased;root.PointerCaptureLost+=(_,_)=>CancelDrag();root.PointerCanceled+=(_,_)=>CancelDrag();
         KeyDown+=(_,e)=>{if(e.Key==global::Windows.System.VirtualKey.Escape){CancelDrag();e.Handled=true;}};
         Unloaded+=(_,_)=>{CancelDrag();StopRecording();};
-        RefreshPresets();RefreshProfiles();UpdateDirty();
+        RefreshPresets();RefreshProfiles();UpdateDirty();Loaded+=(_,_)=>{AlignColumnContent(libraryCard);AlignColumnContent(right);};
     }
     private MenuEntry? Entry=>draft.Find(profileId).Entries.FirstOrDefault(e=>e.Id==selectedButtonId);
     private bool newMenuPending;
@@ -225,7 +243,7 @@ internal sealed partial class MenuEditor : UserControl
         {
             try
             {
-                if(!await ConfirmPendingChangesAsync("新建菜单"))return;
+                if(!await ConfirmPendingChangesAsync("新建菜单")){RestoreProfileSelection();return;}
                 loading=true;profiles.SelectedItem=profiles.Items.Cast<ComboBoxItem>().FirstOrDefault(i=>(string)i.Tag==profileId);loading=false;
                 await RunAsync(()=>RenameAsync(true));
             }
@@ -274,7 +292,7 @@ internal sealed partial class MenuEditor : UserControl
             menuEnabled.IsOn=p.Enabled;priority.Value=p.Priority;delete.IsEnabled=!p.IsDefault;menuSize.Value=p.SizeScale*100;buttonGap.Value=p.ButtonGap;
         }
         finally{loading=false;}
-        RefreshCenterSettings();RefreshRings(0);RefreshButton();RefreshMatchWarning();
+        RefreshCenterSettings();RefreshRings(0);RefreshButton();RefreshMatchWarning();BuildAppearanceSidebar();
     }
     private void RefreshRings(int selected)
     {
@@ -299,12 +317,12 @@ internal sealed partial class MenuEditor : UserControl
             foreach(var control in new UIElement[]{buttonName,iconPicker,actionChoices})
                 control.Visibility=centerSelected?Visibility.Collapsed:Visibility.Visible;
             if(centerSelected){trash.IsEnabled=savePreset.IsEnabled=false;StopRecording();shortcutPanel.Visibility=launchPanel.Visibility=Visibility.Collapsed;RefreshCenterSettings();RefreshPreview();return;}
-            var e=Entry;if(e is null){selectedButtonId=draft.Find(profileId).Entries.FirstOrDefault()?.Id;e=Entry;}
-            buttonName.IsEnabled=iconPicker.IsEnabled=trash.IsEnabled=savePreset.IsEnabled=e is not null;
+            var e=Entry;if(e is null&&selectedButtonId is not null){selectedButtonId=draft.Find(profileId).Entries.FirstOrDefault()?.Id;e=Entry;}
+            if(e is null)buttonPageChanged?.Invoke(false);actionChoices.Visibility=e is null?Visibility.Collapsed:Visibility.Visible;buttonName.IsEnabled=iconPicker.IsEnabled=trash.IsEnabled=savePreset.IsEnabled=e is not null;
             foreach(var choice in actionChoices.Children.OfType<Button>())
                 choice.IsEnabled=e is not null;
             buttonName.Text=e?.Label??"";
-            var icon=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};icon.Children.Add(ButtonIcons.Create(e?.Glyph??actions.FirstOrDefault(a=>a.Id==e?.ActionId)?.Glyph,e?.Image));icon.Children.Add(new TextBlock{Text="选择图标 / 图片",VerticalAlignment=VerticalAlignment.Center});iconPicker.Content=icon;
+            var icon=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8,HorizontalAlignment=HorizontalAlignment.Left};icon.Children.Add(ButtonIcons.Create(e?.Glyph??actions.FirstOrDefault(a=>a.Id==e?.ActionId)?.Glyph,e?.Image));icon.Children.Add(new TextBlock{Text="选择图标 / 图片",VerticalAlignment=VerticalAlignment.Center});iconPicker.Content=icon;
 
             RefreshActionSummary();RefreshLaunchFields();
             if(e is not null)rings.SelectedItem=rings.Items.Cast<ComboBoxItem>().First(i=>(int)i.Tag==e.Ring);

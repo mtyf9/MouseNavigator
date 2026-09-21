@@ -24,18 +24,19 @@ internal sealed partial class MenuEditor
         catch(Exception ex){Notify("保存失败，已保留编辑："+ex.Message,InfoBarSeverity.Error);return false;}
         finally{dialogOpen=false;}
     }
-    internal TriggerSettings CurrentTrigger=>saved.Trigger??new();
-    internal async Task SaveTriggerAsync(TriggerSettings value)
+    internal async Task SaveGlobalSettingsAsync(TriggerSettings trigger,IReadOnlyList<string> blocked)
     {
-        MouseNavigator.Core.ConfigurationCodec.ValidateTrigger(value);
-        var next=saved with{Trigger=value};
+        var next=saved with{Trigger=trigger,BlockedApplications=blocked.ToArray()};
+        MouseNavigator.Core.ConfigurationCodec.Validate(next);
         if(SaveRequested is null)throw new InvalidOperationException("配置保存服务不可用。");
-        await SaveRequested(next);saved=next;draft.SetTrigger(value);
-        Notify("触发设置已保存并生效。",InfoBarSeverity.Success);
+        await SaveRequested(next);saved=next;draft.SetTrigger(trigger);draft.SetBlockedApplications(blocked);
+        Notify("全局设置已保存并生效。",InfoBarSeverity.Success);
     }
+    internal IReadOnlyList<string> CurrentBlockedApplications=>saved.BlockedApplications??[];
+    internal TriggerSettings CurrentTrigger=>saved.Trigger??new();
     internal async Task ResetMenusAsync()
     {
-        var reset=DefaultProfiles.Configuration() with{Presets=draft.Presets.ToArray(),PresetFolders=draft.PresetFolders.ToArray(),PresetOrder=draft.PresetOrder.ToArray(),Trigger=CurrentTrigger};
+        var reset=DefaultProfiles.Configuration() with{Presets=draft.Presets.ToArray(),PresetFolders=draft.PresetFolders.ToArray(),PresetOrder=draft.PresetOrder.ToArray(),Trigger=CurrentTrigger,BackgroundPresets=draft.BackgroundPresets.ToArray(),BlockedApplications=CurrentBlockedApplications,AppearancePresets=draft.AppearancePresets.ToArray()};
         if(SaveRequested is null)throw new InvalidOperationException("配置保存服务不可用。");
         await SaveRequested(reset);saved=reset;Load(reset,false);
     }

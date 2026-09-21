@@ -27,7 +27,7 @@
     <ProjectReference Include="../MouseNavigator.Actions.BuiltIn/MouseNavigator.Actions.BuiltIn.csproj" />
   </ItemGroup>
   <ItemGroup><Content Update="Assets/MouseNavigator.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <ItemGroup><EmbeddedResource Include="Assets/halo.png" /></ItemGroup><ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <Compile Include="../../tests/MouseNavigator.DesktopSmoke/SmokeScenario.cs" Link="Diagnostics/SmokeScenario.cs"/>
   </ItemGroup>
 </Project>

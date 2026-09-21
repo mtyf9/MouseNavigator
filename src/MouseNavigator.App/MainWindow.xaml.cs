@@ -41,14 +41,14 @@ public sealed partial class MainWindow : Window
         store = CreateStore();
         var loaded = store.Load(DefaultProfiles.Configuration);
         registry = CreateRegistry(loaded.Configuration);
-        var resolver = new ProfileResolver(loaded.Configuration.Profiles);
+        var resolver = new ProfileResolver(loaded.Configuration.Profiles,loaded.Configuration.BlockedApplications);
         editor = new MenuEditor(loaded.Configuration, registry.Actions
             .Where(a => !a.Descriptor.Id.StartsWith("shortcuts.", StringComparison.Ordinal)).Select(a => a.Descriptor).ToArray())
         {
             OpenSettingsRequested=ShowSettingsWindow,
             OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this),
             SaveRequested = SaveConfigurationAsync,
-            PickImageRequested = PickIconAsync,
+            PickImageRequested = PickIconAsync, PickBackgroundRequested=PickBackgroundAsync,
             PickProgramsRequested = PickProgramsAsync,
             PickApplicationRequested = PickApplicationAsync,
             ImportMenuRequested = ImportMenuAsync,
@@ -112,7 +112,7 @@ public sealed partial class MainWindow : Window
     private async Task SaveConfigurationAsync(NavigatorConfiguration configuration)
     {
         var updatedRegistry = CreateRegistry(configuration);
-        var updatedResolver = new ProfileResolver(configuration.Profiles);
+        var updatedResolver = new ProfileResolver(configuration.Profiles,configuration.BlockedApplications);
         await Task.Run(() => store.Save(configuration));
         controller?.ApplyConfiguration(updatedRegistry, updatedResolver);
         controller?.ConfigureTrigger(configuration.Trigger??new());
@@ -167,6 +167,14 @@ public sealed partial class MainWindow : Window
         var picker=new FileSavePicker{SuggestedFileName=safeName};picker.FileTypeChoices.Add("悬浮菜单",new List<string>{".json"});
         WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
         var file=await picker.PickSaveFileAsync();if(file is not null)await FileIO.WriteTextAsync(file,json);
+    }
+    private async Task<string?> PickBackgroundAsync()
+    {
+        var picker=new FileOpenPicker();
+        foreach(var ext in new[]{".png",".jpg",".jpeg",".gif"})picker.FileTypeFilter.Add(ext);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file=await picker.PickSingleFileAsync();
+        return file is null?null:await MenuBackgroundView.ImportAsync(file);
     }
     private async Task<string?> PickIconAsync()
     {

@@ -35,7 +35,7 @@ internal sealed partial class MenuEditor
     }
     private bool UpdatePresetDrop(Point windowPoint)
     {
-        if(highlightedFolder is not null&&drag?.Preset is not null&&Inside(highlightedFolder,windowPoint,out _))return true;
+        if(highlightedFolder is not null&&drag?.Preset is not null&&Inside(presetScroll,windowPoint,out _)&&Inside(highlightedFolder,windowPoint,out _))return true;
         ClearPresetDrop();
         if(drag?.Preset is null)return false;
         if(drag.Preset.Id=="builtin-blank")
@@ -43,7 +43,7 @@ internal sealed partial class MenuEditor
             if(Inside(presetScroll,windowPoint,out _)||Inside(presetBack,windowPoint,out _)){dragHint.Text="空白按钮固定在根目录首位，只能拖入轮盘";return true;}
             return false;
         }
-        if(presetBack.IsEnabled&&Inside(presetBack,windowPoint,out _))
+        if(presetBack.IsEnabled&&Inside(presetScroll,windowPoint,out _)&&Inside(presetBack,windowPoint,out _))
         {
             ShowPresetFolderDrop(presetBack,currentPresetFolder?.StartsWith("$")==true?null:
                 draft.PresetFolders.FirstOrDefault(f=>f.Id==currentPresetFolder)?.ParentId);

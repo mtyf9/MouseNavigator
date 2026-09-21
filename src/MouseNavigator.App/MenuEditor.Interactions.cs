@@ -7,6 +7,20 @@ using Windows.Foundation;
 namespace MouseNavigator.App;
 internal sealed partial class MenuEditor
 {
+    private void ClearButtonSelection()
+    {
+        if(selectedButtonId is null&&drag is null)return;CancelDrag();selectedButtonId=null;RefreshButton();buttonPageChanged?.Invoke(false);RefreshPreview();
+    }
+    private void ClearSelectionOnBlank(object sender,PointerRoutedEventArgs e)
+    {
+        if(e.Handled||drag is not null||!e.GetCurrentPoint(root).Properties.IsLeftButtonPressed)return;
+        for(var node=e.OriginalSource as DependencyObject;node is not null&&node!=root;node=Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if(node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase
+                or Microsoft.UI.Xaml.Controls.Primitives.Selector
+                or Microsoft.UI.Xaml.Controls.Primitives.RangeBase
+                or TextBox or PasswordBox or ColorPicker or ToggleSwitch or NumberBox)return;
+        ClearButtonSelection();
+    }
     private MenuDragSession? drag;
     private MenuProfile? dropProposal;
     private Microsoft.UI.Xaml.Input.Pointer? capturedPointer;
@@ -24,7 +38,7 @@ internal sealed partial class MenuEditor
         moved=false;capturedPointer=e.Pointer;
         if(!root.CapturePointer(e.Pointer)){drag=null;capturedPointer=null;return;}
         IsTabStop=true;Focus(FocusState.Programmatic);
-        if(source is not null){selectedButtonId=source;RefreshButton();}
+        if(source is not null){selectedButtonId=source;RefreshButton();buttonPageChanged?.Invoke(true);}
         e.Handled=true;
     }
     private void UpdateDragGhost(Point p)
@@ -88,9 +102,10 @@ internal sealed partial class MenuEditor
         return overTrash;
     }
     private bool IsTrashPoint(Point p)=>p.X>=0&&p.Y>=0&&p.X<=trash.ActualWidth&&p.Y<=trash.ActualHeight;
+    private bool trashHighlighted;
     private void SetTrashHighlight(bool active)
     {
-        trash.Background=active?Brush(143,43,55):Brush(45,37,45);
+        if(trashHighlighted==active)return;trashHighlighted=active;trash.Background=active?Brush(143,43,55):Brush(45,37,45);
         trash.BorderBrush=active?Brush(255,137,144):Brush(93,67,71);
     }
     private void PreviewDragPosition(double x,double y,bool overTrash)
@@ -154,6 +169,7 @@ internal sealed partial class MenuEditor
     }
     private void CancelDrag(bool restorePreview=true)
     {
+        if(drag is null&&capturedPointer is null&&dragGhost is null&&presetDrop is null&&!overPresetDrop)return;
         presetDragScroll.Stop();presetDragPoint=null;ClearPresetDrop();
         var had=drag is not null;drag=null;dropProposal=null;hoverKey=null;moved=false;
         dragWindowToPreview=null;lastDropWindowPoint=null;lastOverTrash=false;overPresetDrop=false;savePreset.Background=presetThemeBrush;

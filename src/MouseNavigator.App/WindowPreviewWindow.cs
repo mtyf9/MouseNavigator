@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,6 +12,12 @@ namespace MouseNavigator.App;
 /// <summary>Non-activating selection surface. DWM owns the live image; WinUI owns the cards.</summary>
 internal sealed partial class WindowPreviewWindow : Window
 {
+    private readonly SurfaceMotion transition=new();
+    private readonly ColorMotion colorMotion=new();
+    private byte thumbnailOpacity=255;
+    internal void PlayTransition()=>transition.Start(appearance.TransitionMilliseconds,t=>{
+        canvas.Opacity=t;thumbnailOpacity=(byte)Math.Round(255*t);UpdateThumbnails();
+    });
     private readonly Canvas canvas = new();
     private readonly nint hwnd;
     public nint Handle=>hwnd;
@@ -52,7 +58,7 @@ internal sealed partial class WindowPreviewWindow : Window
         session = new(windows, new WindowPreviewLayout(placement.Width, placement.Height, windows.Count));
         openingX = lastX = x; openingY = lastY = y;
         armed = false; pageDirection = 0;
-        BuildPage();
+        BuildPage();PlayTransition();
         OverlayWindow.ShowPanel(hwnd, placement);
         IsOpen = true;
         // Native thumbnail rectangles are physical pixels, independent of XAML layout timing.
@@ -60,11 +66,11 @@ internal sealed partial class WindowPreviewWindow : Window
     }
     private void BuildPage()
     {
-        ReleaseThumbnails();
+        colorMotion.Stop();ReleaseThumbnails();
         cards.Clear(); statuses.Clear(); fallbacks.Clear(); canvas.Children.Clear();
         if (session is null) return;
         var layout = session.Layout;
-        canvas.Width = layout.Width; canvas.Height = layout.Height;
+        canvas.Width = layout.Width; canvas.Height = layout.Height;ApplyBackground();
         Place(new TextBlock { Text = "窗口预览", FontSize = 23, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new(20, 14, 180, 32));
         hint = new TextBlock { Text = (clickTrigger?"移动到目标窗口 · 左键或触发键切换 · Esc 取消":"保持按住触发键 · 移到窗口后松开切换 · Esc 取消"), FontSize = 12, Opacity = 0.7 };
         Place(hint, new(20, 46, layout.Width - 40, 22));
@@ -139,7 +145,7 @@ internal sealed partial class WindowPreviewWindow : Window
         if (!IsOpen || session is null) return;
         if (pageDirection != 0 && Environment.TickCount64 >= pageAfter)
         {
-            if (session.TurnPage(pageDirection)) { BuildPage(); UpdateThumbnails(); }
+            if (session.TurnPage(pageDirection)) { BuildPage();PlayTransition(); UpdateThumbnails(); }
             pageAfter = Environment.TickCount64 + 650;
         }
     }
@@ -150,8 +156,8 @@ internal sealed partial class WindowPreviewWindow : Window
         foreach (var (index, window) in session.Visible)
         {
             var alive = session.IsAvailable(window.Identity);
-            cards[index].BorderBrush = alive && selected?.Identity == window.Identity ? PreviewPalette.Highlight(appearance) : PreviewPalette.Card(appearance);
-            cards[index].Background=alive&&selected?.Identity==window.Identity?PreviewPalette.Highlight(appearance):PreviewPalette.Card(appearance);
+            var fill=alive&&selected?.Identity==window.Identity?PreviewPalette.Highlight(appearance):PreviewPalette.Card(appearance);cards[index].BorderBrush=colorMotion.To(cards[index].BorderBrush,fill,120);
+            cards[index].Background=colorMotion.To(cards[index].Background,fill,120);
             cards[index].Opacity = alive ? 1 : 0.4;
             if (!alive)
             {
@@ -162,12 +168,15 @@ internal sealed partial class WindowPreviewWindow : Window
         }
         if (previous is not null) previous.Opacity = session.Page > 0 ? 0.9 : 0.25;
         if (next is not null) next.Opacity = session.Page + 1 < session.PageCount ? 0.9 : 0.25;
-        if(editingAppearance){if(hint is not null)hint.Text="移动鼠标试览高亮 · 右侧调整外观";return;}
+        if(editingAppearance){if(hint is not null)hint.Text=previewOnly?"移动鼠标试览高亮 · 点击空白处或 Esc 关闭":"移动鼠标试览高亮 · 右侧调整外观";return;}
         if (hint is not null) hint.Text = selected is null ? (clickTrigger?"移动到目标窗口 · 左键或触发键切换 · Esc 取消":"保持按住触发键 · 移到窗口后松开切换 · Esc 取消") : (clickTrigger?"左键点击或再次点按触发键切换":"松开触发键切换到选中窗口");
     }
     private void UpdateThumbnails()
     {
         if (session is null) return;
+        // XAML layout may not be ready on the first animation frame. Keep native
+        // registrations until layout supplies valid destination rectangles.
+        if(editingAppearance&&(editorClosed||canvas.XamlRoot is null||canvas.ActualWidth<=0||canvas.ActualHeight<=0))return;
         foreach (var (index, thumbnail) in thumbnails.ToArray())
             if (!ShowThumbnail(thumbnail,session.Layout.Image(index % session.Layout.Capacity)))
             { thumbnail.Dispose(); thumbnails.Remove(index); }
@@ -180,15 +189,17 @@ internal sealed partial class WindowPreviewWindow : Window
     }
     public void HidePreview()
     {
-        IsOpen = false; armed = false; pageDirection = 0;
+        transition.Stop();canvas.Opacity=1;thumbnailOpacity=255;IsOpen = false; armed = false; pageDirection = 0;
         OverlayWindow.Hide(hwnd);
-        ReleaseThumbnails();
+        colorMotion.Stop();ReleaseThumbnails();
         session = null;
         cards.Clear(); statuses.Clear(); fallbacks.Clear(); canvas.Children.Clear();
     }
     private static SolidColorBrush Brush(byte r, byte g, byte b) => new(ColorHelper.FromArgb(255, r, g, b));
 
 #if DEBUG
+    internal byte ThumbnailOpacityForSmoke=>thumbnailOpacity;
+    internal double SurfaceOpacityForSmoke=>canvas.Opacity;
     internal int ThumbnailCountForSmoke => thumbnails.Count;
     internal int PageForSmoke => session?.Page ?? -1;
     internal (int X, int Y) NextPagePointForSmoke => (

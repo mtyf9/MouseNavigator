@@ -21,18 +21,15 @@ internal sealed partial class MenuEditor
         }
         selectedButtonId="right";RefreshButton();
         var original=draft.Find(profileId);
-        DialogOpenedForSmoke=async d=>{
-            var body=(StackPanel)((ScrollViewer)d.Content).Content;
-            ((CheckBox)body.Children[1]).IsChecked=false;
-            ((ColorPicker)body.Children[2]).Color=global::Windows.UI.Color.FromArgb(255,40,150,210);
-            ((Slider)body.Children[3]).Value=35;
-            ((ComboBox)body.Children[0]).SelectedIndex=1;
-            ((CheckBox)body.Children[1]).IsChecked=false;
-            ((ColorPicker)body.Children[2]).Color=global::Windows.UI.Color.FromArgb(255,120,40,80);
-            ((Slider)body.Children[3]).Value=55;
-            await Click(d,"PrimaryButton");
-        };
-        await ChooseMenuColorAsync();DialogOpenedForSmoke=null;buttonGap.Value=12;
+        BuildAppearanceSidebar();
+        var controls=AppearanceControls(appearanceBody).ToArray();
+        var system=controls.OfType<RadioButton>().Single(c=>Equals(c.Content,"跟随系统主题色"));
+        var picker=AppearanceControls((FrameworkElement)((Flyout)controls.OfType<Button>().Single(b=>Equals(b.Tag,"按钮颜色")).Flyout).Content).OfType<ColorPicker>().Single();
+        var opacity=controls.OfType<Slider>().Single(s=>s.Header.ToString()!.StartsWith("按钮透明度"));
+        system.IsChecked=false;picker.Color=global::Windows.UI.Color.FromArgb(255,40,150,210);opacity.Value=35;
+        controls.OfType<ComboBox>().Single(c=>Equals(c.Header,"按钮状态")).SelectedIndex=1;
+        system.IsChecked=false;picker.Color=global::Windows.UI.Color.FromArgb(255,120,40,80);opacity.Value=55;
+        buttonGap.Value=12;
         var edited=draft.Find(profileId);
         var restored=ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot())).Profiles.Single(p=>p.Id==profileId);
         Check(restored.AccentColor=="#2896D2"&&restored.NormalColor=="#782850"&&Math.Abs(restored.NormalOpacity-.45)<.001&&Math.Abs(restored.ActiveOpacity-.65)<.001&&restored.ButtonGap==12,"Both state colors, opacity and gap persist");

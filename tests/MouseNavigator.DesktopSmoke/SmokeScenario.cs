@@ -17,6 +17,11 @@ internal static class SmokeScenario
         Directory.CreateDirectory(directory);
         try
         {
+            if(Environment.GetCommandLineArgs().Contains("--visual-style-check"))
+            {
+                var focusedResults=new List<string>();await main.CheckVisualStyleAsync(focusedResults);
+                await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
+            }
             if(Environment.GetCommandLineArgs().Contains("--trigger-check"))
             {
                 var focusedResults=new List<string>();await main.CheckTriggerAsync(focusedResults);
@@ -66,7 +71,7 @@ internal static class SmokeScenario
             if(Environment.GetCommandLineArgs().Contains("--appearance-check"))
             {
                 await Task.Delay(350);main.ShowEditorForSmoke();var focusedResults=new List<string>();
-                await main.EditorForSmoke.CheckAppearanceAsync(focusedResults,directory);
+                await main.EditorForSmoke.CheckAppearanceAsync(focusedResults,directory);await main.CheckGlobalSettingsAsync(focusedResults,directory);
                 await File.WriteAllLinesAsync(Path.Combine(directory,"result.txt"),focusedResults);return;
             }
             if(Environment.GetCommandLineArgs().Contains("--action-editor-check"))

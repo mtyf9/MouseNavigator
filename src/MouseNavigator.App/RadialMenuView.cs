@@ -16,9 +16,14 @@ internal sealed record MenuButtonVisual(string Id, string Label, string Glyph, A
 /// <summary>The editor and floating window share geometry, appearance and center content.</summary>
 internal sealed class RadialMenuView : UserControl
 {
-    internal string ExecuteHint {get;set;}="松开执行";
+    internal bool UseDesktopGlass {get;set;} internal string ExecuteHint {get;set;}="松开执行";
     internal const string CenterButtonId = "$center";
     private readonly Canvas canvas = new() { Background = new SolidColorBrush(Colors.Transparent) };
+    private readonly Dictionary<string,FrameworkElement> skinViews=[]; private readonly Canvas skinLayer = new() { IsHitTestVisible = false };
+    private readonly SurfaceMotion entrance = new();
+    private readonly ColorMotion colorMotion = new();
+    public void PlayEntrance(){SetBackgroundActive(true);entrance.Enter(this,menu.VisualStyle??new(),Diameter);}
+    public void StopMotion(){entrance.Stop();colorMotion.Stop();SetBackgroundActive(false);} public void SetBackgroundActive(bool active){foreach(var view in skinViews.Values.OfType<MenuBackgroundView>())view.SetActive(active&&view.Visibility==Visibility.Visible);}
     private readonly Canvas backdrop = new() { IsHitTestVisible = false };
     private readonly Canvas buttonLayer = new() { IsHitTestVisible = false };
     private readonly Ellipse centerDisk = new() { Fill = Brush(42, 48, 61) };
@@ -53,12 +58,12 @@ internal sealed class RadialMenuView : UserControl
     public RadialMenuView()
     {
         Content = canvas;
-        Loaded+=(_,_)=>themeSettings.ColorValuesChanged+=ThemeChanged;
+        Loaded+=(_,_)=>{themeSettings.ColorValuesChanged+=ThemeChanged;SetBackgroundActive(true);};
         Unloaded+=(_,_)=>themeSettings.ColorValuesChanged-=ThemeChanged; RequestedTheme = ElementTheme.Dark;
         centerHub.Children.Add(centerDisk); centerHub.Children.Add(centerContent);
-        canvas.Children.Add(backdrop); canvas.Children.Add(buttonLayer); canvas.Children.Add(centerHub);
+        canvas.Children.Add(skinLayer);canvas.Children.Add(backdrop); canvas.Children.Add(buttonLayer); canvas.Children.Add(centerHub);
         animation.Tick += (_, _) => AdvanceAnimation();
-        Unloaded += (_, _) => FinishAnimation();
+        Unloaded += (_, _) => {FinishAnimation();StopMotion();};
         canvas.PointerPressed += (_, e) =>
         {
             var point = e.GetCurrentPoint(canvas);
@@ -79,20 +84,26 @@ internal sealed class RadialMenuView : UserControl
                 :themeSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Accent);
         }
     }
-    private SolidColorBrush MenuBrush(double strength)
-    {
-        var c=Accent;
-        return Brush((byte)(18+c.R*strength),(byte)(18+c.G*strength),(byte)(18+c.B*strength));
-    }
     private SolidColorBrush StateBrush(bool active)
     {
         var hex=active?menu.AccentColor:menu.NormalColor;
-        var c=active?Accent:MenuBrush(0.17).Color;
+        var c=Accent;
         if(hex is not null){var rgb=Convert.ToUInt32(hex[1..],16);c=ColorHelper.FromArgb(255,(byte)(rgb>>16),(byte)(rgb>>8),(byte)rgb);}
-        c.A=(byte)Math.Round(255*(active?menu.ActiveOpacity:menu.NormalOpacity));
+        var style=menu.VisualStyle??new();
+        var strength=MenuSkins.Resolve(style.SkinId).TintStrength(active);
+        // The resting tint is part of the image decoration; it must fade with the image
+        // instead of leaving a dark plate behind a transparent background.
+        if(!active&&style.SkinId=="builtin.glass")strength=0;
+        if(!active&&style.SkinId=="builtin.image")strength*=style.BackgroundOpacity;
+        if(!active&&style.SkinId=="builtin.solid")strength=.12*style.SolidOpacity;
+        c.A=(byte)Math.Round(255*(active?menu.ActiveOpacity:menu.NormalOpacity)*strength);
         return new(c);
     }
-    private void ThemeChanged(global::Windows.UI.ViewManagement.UISettings sender,object args)=>DispatcherQueue.TryEnqueue(()=>Highlight(highlighted));
+    private void ThemeChanged(global::Windows.UI.ViewManagement.UISettings sender,object args)=>DispatcherQueue.TryEnqueue(()=>{
+        var skin=MenuSkins.Resolve(menu.VisualStyle?.SkinId);
+        if(skinViews.TryGetValue(skin.Id,out var view))skin.UpdateBackdrop(view,menu.VisualStyle??new(),Diameter);
+        Highlight(highlighted);
+    });
     public void SetMenu(MenuProfile menu, Func<string, ActionDescriptor?> resolve)
     {
         if (animation.IsEnabled) AdvanceAnimation();
@@ -108,14 +119,26 @@ internal sealed class RadialMenuView : UserControl
         // recreate visuals or restart a movement already in progress.
         if (this.menu.Id == menu.Id && this.menu.RingCount == menu.RingCount && Buttons.SequenceEqual(nextButtons)
             && Enumerable.Range(0,menu.RingCount).All(r=>Layout.Rotation(r)==new MultiRingLayout(menu).Rotation(r))
-            && this.menu.NormalColor==menu.NormalColor&&this.menu.ActiveOpacity==menu.ActiveOpacity&&this.menu.NormalOpacity==menu.NormalOpacity&&this.menu.ButtonGap==menu.ButtonGap&&this.menu.AccentColor == menu.AccentColor && this.menu.CenterText == menu.CenterText && this.menu.CenterImage == menu.CenterImage && this.menu.CenterGlyph == menu.CenterGlyph) { this.menu = menu; return; }
-        this.menu = menu; Buttons = nextButtons;
+            && this.menu.VisualStyle==menu.VisualStyle && this.menu.NormalColor==menu.NormalColor&&this.menu.ActiveOpacity==menu.ActiveOpacity&&this.menu.NormalOpacity==menu.NormalOpacity&&this.menu.ButtonGap==menu.ButtonGap&&this.menu.AccentColor == menu.AccentColor && this.menu.CenterText == menu.CenterText && this.menu.CenterImage == menu.CenterImage && this.menu.CenterGlyph == menu.CenterGlyph) { this.menu = menu; return; }
+        colorMotion.Stop();this.menu = menu; Buttons = nextButtons;
         foreach (var id in tiles.Keys.Except(Buttons.Select(b => b.Id)).ToArray())
         {
             buttonLayer.Children.Remove(tiles[id].Sector); buttonLayer.Children.Remove(tiles[id].Panel); tiles.Remove(id);
         }
         backdrop.Children.Clear();
         Width = Height = canvas.Width = canvas.Height = Diameter;
+        skinLayer.Width=skinLayer.Height=Diameter;
+        var skin=MenuSkins.Resolve(menu.VisualStyle?.SkinId);
+        if(!skinViews.ContainsKey(skin.Id)&&skin.CreateBackdrop(Diameter) is {} skinView)
+        {
+            skinViews.Add(skin.Id,skinView);skinLayer.Children.Add(skinView);
+        }
+        foreach(var (skinId,view) in skinViews)
+        {
+            view.Visibility=skinId==skin.Id&&!(UseDesktopGlass&&skinId=="builtin.glass")?Visibility.Visible:Visibility.Collapsed;
+            view.Width=view.Height=Diameter;
+            if(view is MenuBackgroundView imageBackground)imageBackground.SetActive(skinId==skin.Id);if(skinId==skin.Id)skin.UpdateBackdrop(view,menu.VisualStyle??new(),Diameter);
+        }
         var middle = Diameter / 2;
         backdrop.Width = backdrop.Height = buttonLayer.Width = buttonLayer.Height = Diameter;
 
@@ -214,7 +237,16 @@ internal sealed class RadialMenuView : UserControl
     public void Highlight(string? id)
     {
         highlighted = id;
-        centerDisk.Fill = StateBrush(IsEditor && id == CenterButtonId);
+        var style=menu.VisualStyle??new();
+        SolidColorBrush? Outline(global::Windows.UI.Color fill)
+        {
+            if(!style.OutlineEnabled)return null;
+            if(style.OutlineColor is {} hex){var rgb=Convert.ToUInt32(hex[1..],16);return new(ColorHelper.FromArgb(255,(byte)(rgb>>16),(byte)(rgb>>8),(byte)rgb));}
+            return (.2126*fill.R+.7152*fill.G+.0722*fill.B)>160?new(ColorHelper.FromArgb(95,30,35,45)):new(ColorHelper.FromArgb(95,210,220,235));
+        }
+        var outline=Outline(StateBrush(false).Color);
+        centerDisk.Stroke=outline;centerDisk.StrokeThickness=1;
+        centerDisk.Fill = colorMotion.To(centerDisk.Fill,StateBrush(IsEditor && id == CenterButtonId),(menu.VisualStyle??new()).HighlightMilliseconds);
         void Contrast(StackPanel panel,SolidColorBrush fill)
         {
             var c=fill.Color;
@@ -222,7 +254,7 @@ internal sealed class RadialMenuView : UserControl
             foreach(var child in panel.Children){if(child is TextBlock text)text.Foreground=ink;else if(child is FontIcon icon)icon.Foreground=ink;}
         }
         Contrast(centerContent,(SolidColorBrush)centerDisk.Fill);
-        foreach (var (key, tile) in tiles){var fill=StateBrush(key==id);tile.Sector.Fill=fill;Contrast(tile.Panel,fill);}
+        foreach (var (key, tile) in tiles){var fill=StateBrush(key==id);tile.Sector.Stroke=Outline(fill.Color);tile.Sector.StrokeThickness=1;tile.Sector.Fill=colorMotion.To(tile.Sector.Fill,fill,(menu.VisualStyle??new()).HighlightMilliseconds);Contrast(tile.Panel,fill);}
         var selected = Buttons.FirstOrDefault(b => b.Id == id);
         center.Text = menu.CenterText ?? (IsEditor && id == CenterButtonId ? "松开执行" : selected is null ? "取消" : selected.Interaction == ActionInteraction.WindowPreview ? "进入预览" : ExecuteHint);
         center.Visibility = center.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -241,6 +273,9 @@ internal sealed class RadialMenuView : UserControl
     private static void Place(DependencyObject element, double x, double y) { Canvas.SetLeft((UIElement)element,x); Canvas.SetTop((UIElement)element,y); }
     private static SolidColorBrush Brush(byte r, byte g, byte b) => new(ColorHelper.FromArgb(255,r,g,b));
 #if DEBUG
+    internal MenuBackgroundView? BackgroundForSmoke=>skinViews.Values.OfType<MenuBackgroundView>().FirstOrDefault();
+    internal bool HasGlassForSmoke=>menu.VisualStyle?.SkinId=="builtin.glass";
+    internal global::Windows.UI.Color ButtonColorForSmoke(string id)=>((SolidColorBrush)tiles[id].Sector.Fill).Color;
     internal bool IsAnimatingForSmoke => animation.IsEnabled;
     internal string CenterTextForSmoke => center.Text;
     internal bool HasCenterGlyphForSmoke => menu.CenterGlyph is not null && centerContent.Children.FirstOrDefault() is FontIcon icon && icon.Glyph == menu.CenterGlyph;

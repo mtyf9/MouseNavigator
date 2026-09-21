@@ -31,7 +31,7 @@ internal sealed partial class MenuEditor
         DialogOpenedForSmoke=async d=>{
             var body=(StackPanel)((ScrollViewer)d.Content).Content;
             ((CheckBox)body.Children[1]).IsChecked=false;
-            ((ColorPicker)body.Children[2]).Color=global::Windows.UI.Color.FromArgb(255,50,80,110);
+            ((ColorPicker)((Flyout)((Button)body.Children[2]).Flyout).Content).Color=global::Windows.UI.Color.FromArgb(255,50,80,110);
             ((Slider)body.Children[3]).Value=30;
             ((Slider)body.Children[5]).Value=20;
             await Task.Delay(80);

@@ -3,10 +3,10 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="MouseNavigator">
  <Grid Background="#202020" RequestedTheme="Dark">
   <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-  <Grid x:Name="TitleBar" Padding="20,0"><StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+  <Grid x:Name="TitleBar" Padding="20,0" Margin="0,0,250,0"><StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
    <FontIcon Glyph="&#xE962;" FontSize="17"/><TextBlock Text="MouseNavigator" FontWeight="SemiBold"/>
   </StackPanel></Grid>
-  <ScrollViewer x:Name="PageScroll" Grid.Row="1" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled">
+  <Button Content="全局设置" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,145,0" Click="GlobalSettings_Click"/><ScrollViewer x:Name="PageScroll" Grid.Row="1" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled">
    <StackPanel x:Name="PageContent" Width="{Binding ViewportWidth, ElementName=PageScroll}" Padding="24,12,24,24" MaxWidth="1480" HorizontalAlignment="Center" Spacing="12">
     <StackPanel x:Name="ProfilesPage"/>
    </StackPanel>

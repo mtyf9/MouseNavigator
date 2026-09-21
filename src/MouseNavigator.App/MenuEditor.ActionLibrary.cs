@@ -39,7 +39,9 @@ internal sealed partial class MenuEditor
     }
     private void PopulateActionChoices()
     {
-        if(previewAppearanceButton.Parent is Grid oldPreview)oldPreview.Children.Clear();
+        // Collapsed rows can retain children while Parent reports null; detach from the owned rows first.
+        foreach(var row in actionChoices.Children.OfType<Grid>())row.Children.Clear();
+
         if(selectedActionText.Parent is Grid oldSummary)oldSummary.Children.Clear();
         actionChoices.Children.Clear();
         actionChoices.Children.Add(new TextBlock{Text="选择动作",FontSize=16});
@@ -51,7 +53,7 @@ internal sealed partial class MenuEditor
         selectPreview.HorizontalAlignment=HorizontalAlignment.Stretch;selectPreview.HorizontalContentAlignment=HorizontalAlignment.Left;selectPreview.MinHeight=40;
         previewActionRow.Children.Add(selectPreview);
         previewAppearanceButton.Visibility=Visibility.Visible;
-        Grid.SetColumn(previewAppearanceButton,1);previewActionRow.Children.Add(previewAppearanceButton);actionChoices.Children.Add(previewActionRow);
+        actionChoices.Children.Add(previewActionRow);
         foreach(var group in actions.Where(a=>a.Id!="windows.macro"&&a.Id!="windows.window.preview").GroupBy(a=>a.Category))
         {
             var category=new Button{Content=group.Key+"  ›",HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Left,MinHeight=40};
