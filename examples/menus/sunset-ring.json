@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "shortcuts": [],
+  "menu": {
+    "applications": [],
+    "centerText": "喵",
+    "id": "sunset-ring",
+    "entries": [
+      {
+        "id": "copy",
+        "actionId": "windows.editing.copy",
+        "label": "复制"
+      },
+      {
+        "id": "paste",
+        "actionId": "windows.editing.paste",
+        "label": "粘贴"
+      }
+    ],
+    "schemaVersion": 3,
+    "visualStyle": {
+      "highlightMilliseconds": 160,
+      "gradientAngle": 135,
+      "skinId": "builtin.color-ring",
+      "gradientEnd": "#7850FF",
+      "entrance": 2,
+      "gradientStart": "#FF9040",
+      "entranceMilliseconds": 240
+    },
+    "name": "落日色环",
+    "isGlobalDefault": false
+  }
+}
