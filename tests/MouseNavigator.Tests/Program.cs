@@ -51,8 +51,9 @@ Add("Duplicate plugin registration rejected atomically", () =>
 {
     var registry = new ActionRegistry(); var platform = new FakePlatform();
     registry.Register(new WindowsPlugin(), platform);
+    var registered = registry.Actions.ToArray();
     Throws(() => registry.Register(new WindowsPlugin(), platform));
-    Equal(6, registry.Actions.Count);
+    Equal(true, registered.SequenceEqual(registry.Actions));
 });
 Add("Canceled action does not reach native platform", () =>
 {
@@ -527,6 +528,47 @@ Add("Trigger configuration validates and survives editing and reload",()=>{
     Throws(()=>ConfigurationCodec.ValidateTrigger(new(Device:TriggerDevice.Keyboard,Key:27)));
     Throws(()=>ConfigurationCodec.ValidateTrigger(new(HoldMilliseconds:0)));
     Equal(new TriggerSettings(),new ConfigurationDraft(Config()).Snapshot().Trigger);
+});
+Add("Visual style round trip, portable menu and validation",()=>{
+    var style=new MenuVisualStyle("builtin.color-ring",MenuEntrance.Turn,320,160,"#FF9040","#6040FF",135);
+    var draft=new ConfigurationDraft(Config());draft.SetVisualStyle("global",style);
+    draft.SetPreviewAppearance("global",new(TransitionMilliseconds:240));
+    var config=ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot()));
+    Equal(style,config.Profiles[0].VisualStyle);
+    var doc=MenuDocumentCodec.Deserialize(MenuDocumentCodec.Serialize(new(1,config.Profiles[0],[])));
+    Equal(style,doc.Menu.VisualStyle);Equal(240,doc.Menu.PreviewAppearance!.TransitionMilliseconds);
+    foreach(var name in new[]{"moon-cat","sunset-ring"})
+    {
+        var example=MenuDocumentCodec.Deserialize(File.ReadAllText(Path.Combine("examples","menus",name+".json")));
+        Equal(name,example.Menu.Id);
+    }
+    draft.SetVisualStyle("global",style with{SkinId="community.pet"});
+    Equal("community.pet",ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot())).Profiles[0].VisualStyle!.SkinId);
+    Equal<MenuVisualStyle?>(null,Config().Profiles[0].VisualStyle);
+    var gif=Convert.ToBase64String(Convert.FromHexString("47494638396101000100800000FF00000000FF21FF0B4E45545343415045322E30030100000021F904000A0000002C000000000100010000020244010021F904000A0000002C00000000010001000002024C01003B"));
+    var background=style with{SkinId="builtin.image",BackgroundImage=gif,BackgroundOpacity=.6,GlassOpacity=.42,OutlineEnabled=false,OutlineColor="#12AB34"};
+    draft.SetVisualStyle("global",background);
+    var restored=ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot()));
+    Equal(background,restored.Profiles[0].VisualStyle);
+    Equal(gif,MenuDocumentCodec.Deserialize(MenuDocumentCodec.Serialize(new(1,restored.Profiles[0],[]))).Menu.VisualStyle!.BackgroundImage);
+    Throws(()=>draft.SetVisualStyle("global",background with{BackgroundImage="invalid"}));
+    Throws(()=>draft.SetVisualStyle("global",background with{BackgroundOpacity=double.NaN}));Throws(()=>draft.SetVisualStyle("global",background with{GlassOpacity=double.NaN}));Throws(()=>draft.SetVisualStyle("global",background with{GlassOpacity=1.01}));
+    Throws(()=>draft.SetVisualStyle("global",style with{OutlineColor="invalid"}));Throws(()=>draft.SetVisualStyle("global",style with{GradientStart="invalid"}));
+    Throws(()=>draft.SetVisualStyle("global",style with{GradientAngle=double.NaN}));
+    Throws(()=>draft.SetVisualStyle("global",style with{Entrance=(MenuEntrance)99}));
+    Throws(()=>draft.SetVisualStyle("global",style with{EntranceMilliseconds=-1}));
+    Throws(()=>draft.SetVisualStyle("global",style with{HighlightMilliseconds=501}));
+    Throws(()=>draft.SetPreviewAppearance("global",new(TransitionMilliseconds:1001)));
+});
+Add("Application blacklist persists and overrides matching",()=>{
+    var draft=new ConfigurationDraft(Config());draft.SetBlockedApplications(["NOTEPAD.exe","foo.bar"]);
+    var restored=ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(draft.Snapshot()));
+    var resolver=new ProfileResolver(restored.Profiles,restored.BlockedApplications);
+    Equal(true,resolver.IsBlocked(new(0,"notepad","")));
+    Equal(true,resolver.IsBlocked(new(0,"foo.bar","")));
+    Equal(false,resolver.IsBlocked(new(0,"explorer","")));
+    draft.SetBlockedApplications([]);Equal(0,draft.Snapshot().BlockedApplications!.Count);
+    Throws(()=>draft.SetBlockedApplications(["C:\\bad.exe"]));
 });
 if(args.Length>0)tests=tests.Where(t=>t.Name.Contains(args[0],StringComparison.OrdinalIgnoreCase)).ToList();
 var failed = 0;

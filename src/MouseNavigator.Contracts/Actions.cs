@@ -40,10 +40,10 @@ public sealed record MacroDefinition(string Name, IReadOnlyList<MacroStep> Steps
 public sealed record ApplicationLaunch(string ExecutablePath, string Arguments = "");
 public sealed record MenuEntry(string Id, string ActionId, string? Label = null, string? Glyph = null, int Ring = 0, string? Image = null, ApplicationLaunch? Launch = null, MacroDefinition? Macro = null);
 public sealed record ApplicationMatch(string ProcessName);
-public sealed record WindowPreviewAppearance(string? BackgroundColor=null,string? CardColor=null,string? HighlightColor=null,string? TextColor=null,double BackgroundOpacity=0.96,double CardOpacity=1,double CornerRadius=10);
+public sealed record WindowPreviewAppearance(string? BackgroundColor=null,string? CardColor=null,string? HighlightColor=null,string? TextColor=null,double BackgroundOpacity=0.96,double CardOpacity=1,double CornerRadius=10, int TransitionMilliseconds=180,bool FollowMenuBackground=false,MenuVisualStyle? BackgroundStyle=null);
 public sealed record MenuProfile(int SchemaVersion, string Id, string Name,
     IReadOnlyList<ApplicationMatch> Applications, IReadOnlyList<MenuEntry> Entries, int Priority = 0, int RingCount = 1, string? CenterText = null, string? CenterImage = null, string? CenterGlyph = null,
-    bool Enabled = true, bool? IsGlobalDefault = null, IReadOnlyDictionary<int,double>? RingRotations = null, double SizeScale = 1, string? AccentColor = null, string? NormalColor = null, double ActiveOpacity = 1, double NormalOpacity = 1, double ButtonGap = 4, WindowPreviewAppearance? PreviewAppearance = null)
+    bool Enabled = true, bool? IsGlobalDefault = null, IReadOnlyDictionary<int,double>? RingRotations = null, double SizeScale = 1, string? AccentColor = null, string? NormalColor = null, double ActiveOpacity = 1, double NormalOpacity = 1, double ButtonGap = 4, WindowPreviewAppearance? PreviewAppearance = null, MenuVisualStyle? VisualStyle = null)
 {
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDefault => IsGlobalDefault ?? Applications.Count == 0;

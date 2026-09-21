@@ -12,6 +12,36 @@ public sealed class ConfigurationDraft
     private readonly List<string> presetOrder;
     private readonly bool builtInMenusInitialized;
     private TriggerSettings trigger=new();
+    private readonly List<AppearancePreset> appearancePresets;
+    public IReadOnlyList<AppearancePreset> AppearancePresets=>appearancePresets;
+    public void ReplaceAppearancePresets(IReadOnlyList<AppearancePreset> values){appearancePresets.Clear();appearancePresets.AddRange(values);}
+    public void SaveAppearancePreset(string profileId,string name)
+    {
+        name=name.Trim();
+        if(string.IsNullOrWhiteSpace(name)||name.Length>80||appearancePresets.Count>=50)throw new ArgumentException("外观预设名称需要 1～80 字，最多 50 个预设。");
+        if(appearancePresets.Any(p=>p.Name.Equals(name,StringComparison.OrdinalIgnoreCase)))throw new ArgumentException("已存在同名外观预设。");
+        appearancePresets.Add(new("appearance-"+Guid.NewGuid().ToString("N"),name,MenuAppearance.From(Find(profileId))));
+    }
+    public void RemoveAppearancePreset(string id)=>appearancePresets.RemoveAll(p=>p.Id==id);
+    public void ApplyAppearancePreset(string profileId,string presetId)
+    {
+        var menu=Find(profileId);var value=appearancePresets.Single(p=>p.Id==presetId).Appearance;
+        profiles[profiles.IndexOf(menu)]=value.Apply(menu);
+    }
+    private string[] blockedApplications=[];
+    public void SetBlockedApplications(IReadOnlyList<string> values){ConfigurationCodec.ValidateBlockedApplications(values);blockedApplications=values.ToArray();}
+    private readonly List<BackgroundPreset> backgroundPresets;
+    public IReadOnlyList<BackgroundPreset> BackgroundPresets=>backgroundPresets;
+    public string AddBackgroundPreset(string image)
+    {
+        ConfigurationCodec.ValidateBackgroundImage(image);
+        var existing=backgroundPresets.FirstOrDefault(p=>p.Image==image);
+        if(existing is not null)return existing.Id;
+        if(backgroundPresets.Count>=30)throw new ArgumentException("最多保存 30 张背景图片。");
+        var number=1;while(backgroundPresets.Any(p=>p.Name=="图片 "+number))number++;
+        var id="background-"+Guid.NewGuid().ToString("N");backgroundPresets.Add(new(id,"图片 "+number,image));return id;
+    }
+    public void RemoveBackgroundPreset(string id)=>backgroundPresets.RemoveAll(p=>p.Id==id);
     public void SetTrigger(TriggerSettings value){ConfigurationCodec.ValidateTrigger(value);trigger=value;}
     public IReadOnlyList<string> PresetOrder => presetOrder;
     public void ReorderPresets(IReadOnlyList<string> visibleIds,string sourceId,string? beforeId)
@@ -50,6 +80,11 @@ public sealed class ConfigurationDraft
         ConfigurationCodec.ValidatePreviewAppearance(appearance);var p=Find(id);
         profiles[profiles.IndexOf(p)]=p with{PreviewAppearance=appearance};
     }
+    public void SetVisualStyle(string id,MenuVisualStyle? value)
+    {
+        ConfigurationCodec.ValidateVisualStyle(value);
+        var p=Find(id);profiles[profiles.IndexOf(p)]=p with{VisualStyle=value};
+    }
     public void SetAppearanceOptions(string id,string? active,string? normal,double activeOpacity,double normalOpacity,double gap)
     {
         var p=Find(id);var next=p with{AccentColor=active,NormalColor=normal,ActiveOpacity=activeOpacity,NormalOpacity=normalOpacity,ButtonGap=gap};
@@ -61,7 +96,7 @@ public sealed class ConfigurationDraft
     public ConfigurationDraft(NavigatorConfiguration configuration)
     {
         var copy = ConfigurationCodec.Deserialize(ConfigurationCodec.Serialize(configuration));
-        trigger=copy.Trigger??new();builtInMenusInitialized=copy.BuiltInMenusInitialized;profiles = copy.Profiles.ToList();presetOrder=(copy.PresetOrder??[]).ToList();
+        backgroundPresets=(copy.BackgroundPresets??[new BackgroundPreset("builtin.mandala","环形艺术")]).ToList();appearancePresets=(copy.AppearancePresets??[]).ToList();blockedApplications=(copy.BlockedApplications??[]).ToArray();trigger=copy.Trigger??new();builtInMenusInitialized=copy.BuiltInMenusInitialized;profiles = copy.Profiles.ToList();presetOrder=(copy.PresetOrder??[]).ToList();
         folders=(copy.PresetFolders??[]).ToList();shortcuts = copy.Shortcuts.ToList(); presets = (copy.Presets ?? []).ToList();
     }
     public MenuProfile Find(string id) => profiles.Single(p => p.Id == id);
@@ -261,7 +296,7 @@ public sealed class ConfigurationDraft
         profiles[profiles.IndexOf(profile)] = MultiRingLayout.AlignChangedCounts(profile, profile with { Entries = entries.ToArray() });
     public NavigatorConfiguration Snapshot()
     {
-        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray(),folders.ToArray(),presetOrder.ToArray(),builtInMenusInitialized,trigger);
+        var result = new NavigatorConfiguration(3, profiles.ToArray(), shortcuts.ToArray(), presets.ToArray(),folders.ToArray(),presetOrder.ToArray(),builtInMenusInitialized,trigger,backgroundPresets.ToArray(),blockedApplications,appearancePresets.ToArray());
         ConfigurationCodec.Validate(result);
         return result;
     }

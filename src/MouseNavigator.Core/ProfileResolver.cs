@@ -8,9 +8,11 @@ public sealed class ProfileResolver
     private readonly MenuProfile fallback;
     public IReadOnlyList<MenuProfile> Profiles => profiles;
 
-    public ProfileResolver(IEnumerable<MenuProfile> profiles)
+    public IReadOnlyList<string> BlockedApplications {get;}
+    public bool IsBlocked(ApplicationContext context)=>BlockedApplications.Any(n=>Normalize(n).Equals(Normalize(context.ProcessName),StringComparison.OrdinalIgnoreCase));
+    public ProfileResolver(IEnumerable<MenuProfile> profiles,IReadOnlyList<string>? blockedApplications=null)
     {
-        var supplied = profiles.ToArray();
+        ConfigurationCodec.ValidateBlockedApplications(blockedApplications??[]);BlockedApplications=(blockedApplications??[]).ToArray();var supplied = profiles.ToArray();
         foreach (var profile in supplied)
         {
             if (profile is null || profile.SchemaVersion != 3 || !ConfigurationCodec.ValidId(profile.Id)

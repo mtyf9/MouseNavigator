@@ -58,7 +58,16 @@ public static class ConfigurationCodec
                 throw new ArgumentException("自定义快捷键名称或标识无效，或标识重复。");
             ShortcutKeys.Validate(shortcut.Keys);
         }
-        ValidateTrigger(configuration.Trigger??new());
+        ValidateTrigger(configuration.Trigger??new());ValidateBlockedApplications(configuration.BlockedApplications??[]);
+        var appearancePresets=configuration.AppearancePresets??[];
+        if(appearancePresets.Count>50||appearancePresets.Any(p=>p is null||!ValidId(p.Id)||string.IsNullOrWhiteSpace(p.Name)||p.Name.Length>80||p.Appearance is null)
+            ||appearancePresets.Select(p=>p.Id).Distinct().Count()!=appearancePresets.Count)throw new ArgumentException("外观预设无效。");
+        foreach(var preset in appearancePresets)
+            Validate(new NavigatorConfiguration(3,[preset.Appearance.Apply(new MenuProfile(3,"appearance","外观",[],[],IsGlobalDefault:true))],[]));
+        var backgrounds=configuration.BackgroundPresets??[];
+        if(backgrounds.Count>30||backgrounds.Any(p=>p is null||!ValidId(p.Id)||string.IsNullOrWhiteSpace(p.Name)||p.Name.Length>80||p.Image is null&&p.Id!="builtin.mandala")
+            ||backgrounds.Select(p=>p.Id).Distinct().Count()!=backgrounds.Count)throw new ArgumentException("背景预设无效。");
+        foreach(var background in backgrounds)ValidateBackgroundImage(background.Image);
         var folders=configuration.PresetFolders??[];
         if(folders.Count>100||folders.Any(f=>f is null||!ValidId(f.Id)||string.IsNullOrWhiteSpace(f.Name)||f.Name.Length>80)||folders.Select(f=>f.Id).Distinct().Count()!=folders.Count||folders.GroupBy(f=>f.ParentId).Any(g=>g.Select(f=>f.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=g.Count()))throw new ArgumentException("预设文件夹无效或重复。");
         var folderMap=folders.ToDictionary(f=>f.Id);
@@ -86,7 +95,7 @@ public static class ConfigurationCodec
         }
         foreach (var profile in configuration.Profiles)
         {
-            ValidatePreviewAppearance(profile.PreviewAppearance);
+            ValidatePreviewAppearance(profile.PreviewAppearance);ValidateVisualStyle(profile.VisualStyle);
             if (profile.CenterText?.Length > 40) throw new ArgumentException("中心文字不能超过 40 个字符。");
             if (profile.CenterGlyph?.Length > 8) throw new ArgumentException("中心图标无效。");
             ValidateImage(profile.CenterImage);
@@ -106,10 +115,29 @@ public static class ConfigurationCodec
                 throw new ArgumentException($"缺少快捷键定义：{entry.ActionId}");
         }
     }
-    public static void ValidatePreviewAppearance(WindowPreviewAppearance? value)
+    public static void ValidateBlockedApplications(IReadOnlyList<string> names)
+    {
+        if(names.Count>100||names.Any(n=>string.IsNullOrWhiteSpace(n)||n.Length>120||n.IndexOfAny(['/', '\\', '*', '?', ':'])>=0||string.IsNullOrWhiteSpace(n.Replace(".exe","",StringComparison.OrdinalIgnoreCase))))
+            throw new ArgumentException("黑名单最多 100 项，请填写应用进程名，例如 game.exe。");
+    }
+    public static void ValidateVisualStyle(MenuVisualStyle? value)
     {
         if(value is null)return;
-        foreach(var color in new[]{value.BackgroundColor,value.CardColor,value.HighlightColor,value.TextColor})
+        if(value.OutlineColor is {} outline&&(outline.Length!=7||outline[0]!='#'||!outline[1..].All(Uri.IsHexDigit)))throw new ArgumentException("描边颜色无效。");ValidateBackgroundImage(value.BackgroundImage);if(!double.IsFinite(value.GlassOpacity)||value.GlassOpacity is <0 or >1)throw new ArgumentException("毛玻璃透明度无效。");
+        if(!double.IsFinite(value.BackgroundOpacity)||value.BackgroundOpacity is <0 or >1)throw new ArgumentException("背景透明度无效。");
+        if(!double.IsFinite(value.SolidOpacity)||value.SolidOpacity is <0 or >1)throw new ArgumentException("纯色背景透明度无效。");
+        foreach(var color in new[]{value.GradientStart,value.GradientEnd,value.SolidColor??"#000000"})
+            if(color is null||color.Length!=7||color[0]!='#'||!color[1..].All(Uri.IsHexDigit))throw new ArgumentException("渐变颜色无效。");
+        if(!double.IsFinite(value.GradientAngle)||value.GradientAngle is <0 or >360)throw new ArgumentException("渐变方向无效。");
+        if(string.IsNullOrWhiteSpace(value.SkinId)||value.SkinId.Length>100||!ValidId(value.SkinId)
+            ||!Enum.IsDefined(value.Entrance)||value.EntranceMilliseconds is <0 or >1000
+            ||value.HighlightMilliseconds is <0 or >500)
+            throw new ArgumentException("外观样式或动画时长无效。");
+    }
+    public static void ValidatePreviewAppearance(WindowPreviewAppearance? value)
+    {
+        if(value is null)return;ValidateVisualStyle(value.BackgroundStyle);
+        if(value.TransitionMilliseconds is <0 or >1000)throw new ArgumentException("窗口预览动画时长无效。");foreach(var color in new[]{value.BackgroundColor,value.CardColor,value.HighlightColor,value.TextColor})
             if(color is not null&&(color.Length!=7||color[0]!='#'||!color[1..].All(Uri.IsHexDigit)))throw new ArgumentException("窗口预览颜色无效。");
         if(!double.IsFinite(value.BackgroundOpacity)||value.BackgroundOpacity is <0 or >1||!double.IsFinite(value.CardOpacity)||value.CardOpacity is <0 or >1||!double.IsFinite(value.CornerRadius)||value.CornerRadius is <0 or >30)throw new ArgumentException("窗口预览透明度或圆角无效。");
     }
@@ -174,6 +202,22 @@ public static class ConfigurationCodec
             }
         }
         return root.ToJsonString();
+    }
+    public static void ValidateBackgroundImage(string? image)
+    {
+        if(image is null)return;
+        if(image.Length>5600000)throw new ArgumentException("背景文件不能超过 4 MB。");
+        byte[] bytes;
+        try{bytes=Convert.FromBase64String(image);}catch(FormatException){throw new ArgumentException("背景图片格式无效。");}
+        if(bytes.Length>4*1024*1024||bytes.Length<24)throw new ArgumentException("背景文件大小无效。");
+        var png=bytes.AsSpan(0,8).SequenceEqual(new byte[]{137,80,78,71,13,10,26,10});
+        var gif=System.Text.Encoding.ASCII.GetString(bytes,0,6) is "GIF87a" or "GIF89a";
+        var jpeg=bytes[0]==255&&bytes[1]==216&&bytes[2]==255;
+        if(!png&&!gif&&!jpeg)throw new ArgumentException("背景仅支持 PNG、JPEG 和 GIF。");
+        uint w=1,h=1;
+        if(png){w=System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16,4));h=System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20,4));}
+        if(gif){w=System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6,2));h=System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(8,2));}
+        if(w is 0 or >2048||h is 0 or >2048)throw new ArgumentException("背景尺寸不能超过 2048 像素。");
     }
     public static void ValidateImage(string? image)
     {
